@@ -42,16 +42,30 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
     {
         "id": "vieneu-ngoc-linh",
         "provider": "vieneu",
-        "name": "📖 Ngọc Linh (Nữ · Trầm Ấm / Sâu Lắng & Kể Chuyện)",
+        "name": "📖 Ngọc Linh (Nữ · Bắc - Trầm Đằm / Review Tu Tiên & Recap)",
         "gender": "female",
-        "accent": "Miền Bắc (Trầm ấm)",
-        "recommended": False,
+        "accent": "Miền Bắc (Trầm đằm & Khàn nhẹ)",
+        "recommended": True,
         "is_default": False,
-        "badge": "Nữ Trầm Ấm",
+        "badge": "⭐ Trầm Đằm Chuẩn Vbee",
         "category": "VieNeu Acoustic",
         "vieneu_preset": "Ngọc Linh",
-        "description": "Giọng nữ trầm ấm, sâu lắng, nhịp điệu chậm rãi truyền cảm. Cực kỳ cuốn hút cho truyện ngôn tình, radio tâm sự đêm khuya và phim tài liệu sâu sắc.",
-        "sample_text": "Tại vùng rìa của dải ngân hà xa xôi, một cuộc chiến khốc liệt giành quyền kiểm soát nguồn năng lượng đã bùng nổ."
+        "description": "Giọng nữ miền Bắc tone trầm (-32Hz), chất giọng đằm, hơi khàn nhẹ và dày dặn. Nhịp đọc nhanh dứt khoát (1.12x), tăng dải trầm ấm 250Hz - 400Hz. Phong cách tương đương Ngọc Huyền Vbee, chuyên trị review truyện tu tiên, phim dài tập, nghe bền tai không chói.",
+        "sample_text": "Lúc này tại thánh địa Vạn Cổ, Tiêu Viêm vừa mới bước chân vào đại điện đã cảm nhận được một luồng uy áp kinh hoàng từ phương xa ập tới."
+    },
+    {
+        "id": "vieneu-ngoc-huyen",
+        "provider": "vieneu",
+        "name": "✨ Ngọc Huyền (Nữ · Bắc - Review Hoạt Hình 3D & Tu Tiên)",
+        "gender": "female",
+        "accent": "Miền Bắc (Đằm thắm & Dứt khoát)",
+        "recommended": True,
+        "is_default": False,
+        "badge": "⭐ Giọng Quốc Dân Recap",
+        "category": "VieNeu Acoustic",
+        "vieneu_preset": "Ngọc Huyền",
+        "description": "Tinh chỉnh âm học chuẩn phong cách Ngọc Huyền Vbee: Pitch -32Hz loại bỏ hoàn toàn âm the thé, nhịp đọc 1.12x dứt khoát, tăng cường dải trầm ấm 250Hz - 400Hz (+3.8dB). Giọng đọc số 1 cho review hoạt hình 3D, donghua và truyện dài tập.",
+        "sample_text": "Lúc này tại thánh địa Vạn Cổ, Tiêu Viêm vừa mới bước chân vào đại điện đã cảm nhận được một luồng uy áp kinh hoàng từ phương xa ập tới."
     },
     {
         "id": "vieneu-my-duyen",
@@ -200,7 +214,6 @@ class TTSService:
             "vi-VN-HoaiMyAnime": "vieneu-thuy-dung",
             "vi-VN-HoaiMyNarrator": "vieneu-ngoc-linh",
             "vieneu-truc-ly": "vieneu-thuy-dung",
-            "vieneu-ngoc-huyen": "vieneu-thuy-dung",
             "vieneu-ngoc-tran": "vieneu-my-duyen",
             "vieneu-thuc-doan": "vieneu-ngoc-linh",
             "vieneu-anh-khoi": "vieneu-minh-quan",
@@ -317,9 +330,15 @@ class TTSService:
             },
             "vieneu-ngoc-linh": {
                 "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "-36Hz",
-                "rate_adj": -8,
-                "eq": "equalizer=f=240:width_type=h:width=100:g=4.0"
+                "pitch": "-32Hz",
+                "rate_adj": 12,
+                "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
+            },
+            "vieneu-ngoc-huyen": {
+                "edge_voice": "vi-VN-HoaiMyNeural",
+                "pitch": "-32Hz",
+                "rate_adj": 12,
+                "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
             },
             "vieneu-my-duyen": {
                 "edge_voice": "vi-VN-HoaiMyNeural",
