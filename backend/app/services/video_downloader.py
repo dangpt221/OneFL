@@ -122,7 +122,7 @@ class VideoDownloaderService:
 
         ydl_opts = self._get_base_ydl_opts()
         ydl_opts.update({
-            "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/bestvideo[height<=1080]+bestaudio/best[height<=720]/best",
+            "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
             "outtmpl": out_tmpl,
             "merge_output_format": "mp4",
             "noplaylist": True,
@@ -130,6 +130,12 @@ class VideoDownloaderService:
             "http_chunk_size": 10485760,
             "buffersize": 1048576,
         })
+
+        if "bilibili.com" in url:
+            p_match = re.search(r'[?&]p=(\d+)', url)
+            if p_match:
+                ydl_opts["noplaylist"] = False
+                ydl_opts["playlist_items"] = p_match.group(1)
 
         if progress_callback:
             def ydl_hook(d):

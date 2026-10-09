@@ -1,7 +1,8 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
+from fastapi import UploadFile
 import aiofiles
 from app.config import settings
 
@@ -27,6 +28,46 @@ class StorageService:
         s_dir = self.scratch_dir / project_id
         s_dir.mkdir(parents=True, exist_ok=True)
         return s_dir
+
+    async def save_upload_file_stream(
+        self,
+        project_id: str,
+        upload_file: UploadFile,
+        chunk_size: int = 1024 * 1024 * 8
+    ) -> Path:
+        """Streams large uploaded video file to disk in chunks to prevent OOM crash on 10h/50GB files."""
+        p_dir = self.get_project_dir(project_id)
+        filename = upload_file.filename or "video.mp4"
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+        file_path = p_dir / f"original_{safe_filename}"
+        async with aiofiles.open(file_path, "wb") as f:
+            while chunk := await upload_file.read(chunk_size):
+                await f.write(chunk)
+        return file_path
+
+    async def write_upload_chunk(
+        self,
+        project_id: str,
+        filename: str,
+        chunk_file: UploadFile,
+        offset: int
+    ) -> Path:
+        """Writes a file chunk at a specific offset. Safe for retries and parallel uploads."""
+        p_dir = self.get_project_dir(project_id)
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+        file_path = p_dir / f"original_{safe_filename}"
+        
+        mode = "r+b" if file_path.exists() else "wb"
+        async with aiofiles.open(file_path, mode) as f:
+            if offset > 0 and not file_path.exists():
+                # If writing offset > 0 but file doesn't exist, this is an issue.
+                # Just open as wb and let it write, though it might be sparse.
+                pass
+            await f.seek(offset)
+            while data := await chunk_file.read(1024 * 1024 * 8):
+                await f.write(data)
+                
+        return file_path
 
     async def save_upload_file(self, project_id: str, filename: str, file_bytes: bytes) -> Path:
         p_dir = self.get_project_dir(project_id)

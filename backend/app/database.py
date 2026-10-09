@@ -12,16 +12,22 @@ db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Default to SQLite for zero-config local reliability
-if "localhost" in db_url and "postgres_secure_password" in db_url:
-    db_url = "sqlite+aiosqlite:///./onefl_videotrans.db"
+is_postgres = "postgresql" in db_url
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
 
-engine = create_async_engine(
-    db_url,
-    echo=False,
-    future=True,
-    pool_pre_ping=True if "postgresql" in db_url else False,
-)
+if is_postgres:
+    engine_kwargs.update({
+        "pool_size": getattr(settings, "DB_POOL_SIZE", 20),
+        "max_overflow": getattr(settings, "DB_MAX_OVERFLOW", 10),
+        "pool_recycle": 3600,
+        "pool_pre_ping": True,
+    })
+
+engine = create_async_engine(db_url, **engine_kwargs)
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -81,8 +87,8 @@ async def init_db():
                 ("projects", "dubbed_video_path", "TEXT"),
                 ("projects", "dubbed_audio_url", "TEXT"),
                 ("projects", "dubbed_audio_path", "TEXT"),
-                ("projects", "default_voice", "VARCHAR(50) DEFAULT 'nova'"),
-                ("speaker_profiles", "tts_voice", "VARCHAR(50) DEFAULT 'nova'"),
+                ("projects", "default_voice", "VARCHAR(50) DEFAULT 'vi-VN-HoaiMyNeural'"),
+                ("speaker_profiles", "tts_voice", "VARCHAR(50) DEFAULT 'vi-VN-HoaiMyNeural'"),
                 ("speaker_profiles", "tts_speed", "FLOAT DEFAULT 1.0"),
             ]
             for table, col, col_type in migration_cols:

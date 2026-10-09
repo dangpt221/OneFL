@@ -241,8 +241,7 @@ async def upload_video_and_start(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    content = await file.read()
-    saved_path = await storage_service.save_upload_file(project_id, file.filename or "video.mp4", content)
+    saved_path = await storage_service.save_upload_file_stream(project_id, file)
 
     project.local_video_path = str(saved_path)
     project.original_video_url = storage_service.get_relative_url(saved_path)
@@ -256,6 +255,48 @@ async def upload_video_and_start(
                 await workflow_engine.run_pipeline(bg_db, pid)
 
         background_tasks.add_task(run_bg_pipeline, project_id)
+
+    resp = ProjectResponse.model_validate(project)
+    resp.cue_count = (await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id))).scalar() or 0
+    resp.speaker_count = (await db.execute(select(func.count(SpeakerProfile.id)).where(SpeakerProfile.project_id == project_id))).scalar() or 0
+    resp.glossary_count = (await db.execute(select(func.count(GlossaryTerm.id)).where(GlossaryTerm.project_id == project_id))).scalar() or 0
+    return resp
+
+
+@router.post("/{project_id}/upload-chunk", response_model=ProjectResponse)
+async def upload_video_chunk(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    filename: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    offset: int = Form(...),
+    auto_start_pipeline: bool = Form(True),
+    db: AsyncSession = Depends(get_db)
+):
+    """Uploads a specific chunk of a video file for large file client-side chunking."""
+    res = await db.execute(select(Project).where(Project.id == project_id))
+    project = res.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    saved_path = await storage_service.write_upload_chunk(project_id, filename, file, offset)
+
+    # Nếu là chunk cuối cùng
+    if chunk_index == total_chunks - 1:
+        project.local_video_path = str(saved_path)
+        project.original_video_url = storage_service.get_relative_url(saved_path)
+        project.status = "INGESTING" if auto_start_pipeline else "CREATED"
+        
+        if auto_start_pipeline:
+            async def run_bg_pipeline(pid: str):
+                async with get_async_session() as bg_db:
+                    await workflow_engine.run_pipeline(bg_db, pid)
+            background_tasks.add_task(run_bg_pipeline, project_id)
+
+    await db.commit()
+    await db.refresh(project)
 
     resp = ProjectResponse.model_validate(project)
     resp.cue_count = (await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id))).scalar() or 0

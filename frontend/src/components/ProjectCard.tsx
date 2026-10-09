@@ -1,9 +1,10 @@
 'use client';
 
+import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, Clock, Download, Loader2, MessageSquare, Trash2, Users } from 'lucide-react';
 import Link from 'next/link';
-import { Clock, MessageSquare, Users, BookOpen, ChevronRight, Trash2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { Project } from '@/lib/types';
+
 import { getFriendlyStageName, getFriendlyVoiceName } from '@/components/PipelineProgressTracker';
+import { Project } from '@/lib/types';
 
 interface ProjectCardProps {
   project: Project;
@@ -153,14 +154,29 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
           <Trash2 className="w-4 h-4" />
         </button>
 
-        <Link
-          href={`/projects/${project.id}`}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200/80 hover:border-indigo-600 text-xs font-bold transition-all shadow-xs group/btn"
-        >
-          <span>Open Studio</span>
-          <ChevronRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-        </Link>
+        <div className="flex items-center gap-2">
+          {(project.burned_video_url || project.dubbed_video_url) && (
+            <a
+              href={project.burned_video_url || project.dubbed_video_url}
+              download
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              title="Tải video hoàn thiện về máy tính"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Tải Video</span>
+            </a>
+          )}
+
+          <Link
+            href={`/projects/${project.id}`}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200/80 hover:border-indigo-600 text-xs font-bold transition-all shadow-xs group/btn"
+          >
+            <span>Open Studio</span>
+            <ChevronRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
       </div>
+
     </div>
   );
 }

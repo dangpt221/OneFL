@@ -3,6 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import sys
+import asyncio
+
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from app.config import settings
 from app.database import init_db
@@ -14,6 +19,8 @@ from app.api.v1.pipeline import router as pipeline_router
 from app.api.v1.tts import router as tts_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.websocket import router as ws_router
+from app.api.v1.agent import router as agent_router
+
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +76,8 @@ app.include_router(pipeline_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tts_router, prefix=settings.API_V1_PREFIX)
 app.include_router(settings_router, prefix=settings.API_V1_PREFIX)
 app.include_router(ws_router, prefix=settings.API_V1_PREFIX)
+app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
+
 
 
 @app.get("/")

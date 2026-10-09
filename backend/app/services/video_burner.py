@@ -70,12 +70,73 @@ class VideoBurner:
         else:
             return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22"]
 
+    def build_video_filter(
+        self,
+        ass_filename: str,
+        clean_chinese_mode: str = "cinema_bars",
+        mask_original_sub: bool = True,
+        top_mask_pct: float = 0.11,
+        bottom_mask_pct: float = 0.15
+    ) -> str:
+        """
+        Builds the FFmpeg video filter for removing Chinese text, watermarks, and rendering ASS subtitles.
+        Modes:
+        - 'cinema_bars': Top black bar (covers Bilibili logo & top watermark) + Bottom black bar (covers Chinese hardsub).
+        - 'bottom_bar': Bottom black bar only (covers Chinese hardsub).
+        - 'smart_blur': Boxblur on top logo area and bottom subtitle area.
+        - 'cinema_zoom': Crop top & bottom and scale to full frame (zoom 108-112%), eliminating borders.
+        - 'none': Direct subtitle burn without masking.
+        """
+        top_pct = max(0.04, min(0.28, float(top_mask_pct)))
+        bot_pct = max(0.06, min(0.35, float(bottom_mask_pct)))
+
+        if not mask_original_sub or clean_chinese_mode == "none":
+            return f"ass={ass_filename}"
+
+        if clean_chinese_mode == "cinema_bars":
+            return (
+                f"drawbox=x=0:y=0:w=iw:h=ih*{top_pct:.3f}:color=black@1.0:t=fill,"
+                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
+                f"ass={ass_filename}"
+            )
+        elif clean_chinese_mode == "bottom_bar":
+            return (
+                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
+                f"ass={ass_filename}"
+            )
+        elif clean_chinese_mode == "smart_blur":
+            return (
+                f"split[m0][b0];"
+                f"[b0]crop=iw:ih*{top_pct:.3f}:0:0,boxblur=8:2[topb];"
+                f"[m0][topb]overlay=0:0[m1];"
+                f"[m1]split[m2][b1];"
+                f"[b1]crop=iw:ih*{bot_pct:.3f}:0:ih-ih*{bot_pct:.3f},boxblur=8:2[botb];"
+                f"[m2][botb]overlay=0:H-h[m3];"
+                f"[m3]ass={ass_filename}"
+            )
+        elif clean_chinese_mode == "cinema_zoom":
+            cut_pct = top_pct + bot_pct
+            return (
+                f"crop=iw:ih*(1.0-{cut_pct:.3f}):0:ih*{top_pct:.3f},"
+                f"scale=iw:ih:flags=lanczos,"
+                f"ass={ass_filename}"
+            )
+        else:
+            return (
+                f"drawbox=x=0:y=0:w=iw:h=ih*{top_pct:.3f}:color=black@1.0:t=fill,"
+                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
+                f"ass={ass_filename}"
+            )
+
     async def burn_subtitles_to_video(
         self,
         video_path: Path,
         ass_subtitle_path: Path,
         output_video_path: Path,
         mask_original_sub: bool = True,
+        clean_chinese_mode: str = "cinema_bars",
+        top_mask_pct: float = 0.11,
+        bottom_mask_pct: float = 0.15,
         gpu_device_id: int = 0
     ) -> Path:
         """Burns ASS subtitles into video using auto-detected GPU hardware acceleration or libx264."""
@@ -87,11 +148,13 @@ class VideoBurner:
             ass_filename = ass_subtitle_path.name
             ass_dir = ass_subtitle_path.parent
 
-            # Filter: Optional solid black banner to completely conceal original hardcoded foreign subtitles (100% opaque)
-            if mask_original_sub:
-                vf_filter = f"drawbox=x=0:y=ih-102:w=iw:h=88:color=black@1.0:t=fill,ass={ass_filename}"
-            else:
-                vf_filter = f"ass={ass_filename}"
+            vf_filter = self.build_video_filter(
+                ass_filename=ass_filename,
+                clean_chinese_mode=clean_chinese_mode,
+                mask_original_sub=mask_original_sub,
+                top_mask_pct=top_mask_pct,
+                bottom_mask_pct=bottom_mask_pct
+            )
 
             best_enc = await self.detect_best_encoder()
             enc_args = self._get_encoder_args(best_enc)
@@ -170,8 +233,9 @@ class VideoBurner:
                 f.write(f"file '{p.resolve().as_posix()}'\n")
 
         if self.is_ffmpeg_available():
+            ffmpeg_bin = settings.get_ffmpeg_bin()
             cmd = [
-                settings.FFMPEG_PATH,
+                ffmpeg_bin,
                 "-y",
                 "-f", "concat",
                 "-safe", "0",

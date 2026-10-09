@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import '@/styles/globals.css';
 import Navbar from '@/components/Navbar';
+import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
   title: 'OneFL Studio - AI Video Translation & Subtitle Burner (10h+)',
@@ -23,6 +24,8 @@ export default function RootLayout({
         <main className="max-w-7xl mx-auto px-6 py-8">
           {children}
         </main>
+        
+        <Toaster position="top-right" />
       </body>
     </html>
   );

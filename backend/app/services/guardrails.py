@@ -135,12 +135,47 @@ class SubtitleGuardrails:
             speaker = orig_cue.get("speaker", "SPEAKER_00")
             target_speaker = orig_cue.get("target_speaker")
 
-            # TIER 4: Physical Subtitle Limits & Auto-wrap
+            # Format text first for both Tier 2 & Tier 4
             formatted_text = cls.auto_wrap_text(
                 trans_text,
                 max_chars_per_line=settings.MAX_SUBTITLE_LINE_LENGTH,
                 max_lines=settings.MAX_SUBTITLE_LINES
             )
+            normalized_trans_lower = " ".join(formatted_text.lower().split())
+
+            # TIER 2: Pronoun & Gender Consistency Guard
+            if relationship_matrix and target_speaker:
+                rel_key = f"{speaker}_to_{target_speaker}"
+                if rel_key in relationship_matrix:
+                    rel_rules = relationship_matrix[rel_key]
+                    allowed_self = [p.strip().lower() for p in rel_rules.get("self", "").split("/") if p.strip()]
+                    allowed_target = [p.strip().lower() for p in rel_rules.get("target", "").split("/") if p.strip()]
+                    allowed_all = set(allowed_self + allowed_target)
+                    
+                    strict_pronouns = [
+                        "mày", "tao", "ngươi", "ta", "anh", "em", "chị", "tôi", "ông", "bà", "cô", "chú"
+                    ]
+                    
+                    # Remove punctuation to better match exact words
+                    import string
+                    clean_text = normalized_trans_lower.translate(str.maketrans('', '', string.punctuation))
+                    # Protect compounds like 'chúng ta' and 'người ta' from false-matching singular archaic 'ta'
+                    clean_text = clean_text.replace("chúng ta", "__chung_ta__").replace("người ta", "__nguoi_ta__")
+                    padded_text = f" {clean_text} "
+                    
+                    used_strict = [p for p in strict_pronouns if f" {p} " in padded_text]
+                    
+                    for p in used_strict:
+                        if p not in allowed_all:
+                            violations.append({
+                                "tier": 2,
+                                "cue_id": cue_id,
+                                "type": "PRONOUN_MISMATCH",
+                                "message": f"Sử dụng đại từ '{p}' không khớp với relationship_matrix (Cho phép: {', '.join(allowed_all)}).",
+                                "current_text": formatted_text
+                            })
+
+            # TIER 4: Physical Subtitle Limits & Auto-wrap
             lines = formatted_text.split("\n")
             max_line_len = max(len(l) for l in lines) if lines else 0
             cps = cls.calculate_cps(formatted_text, duration)
@@ -168,10 +203,17 @@ class SubtitleGuardrails:
             # TIER 3: Glossary & Term Enforcement Guard
             if glossary_map:
                 orig_text_lower = orig_cue.get("text", "").lower()
+                normalized_trans_lower = " ".join(formatted_text.lower().split())
+                import string
+                clean_trans_lower = normalized_trans_lower.translate(str.maketrans('', '', string.punctuation))
+                padded_clean_trans = f" {clean_trans_lower} "
+
                 for src_term, tgt_term in glossary_map.items():
                     if src_term.lower() in orig_text_lower:
-                        # Ensure target term or natural variant exists in translation
-                        if tgt_term.lower() not in formatted_text.lower():
+                        normalized_tgt = " ".join(tgt_term.lower().split())
+                        clean_tgt = normalized_tgt.translate(str.maketrans('', '', string.punctuation))
+                        # Match either in normalized or clean translation
+                        if normalized_tgt not in normalized_trans_lower and f" {clean_tgt} " not in padded_clean_trans and clean_tgt not in clean_trans_lower:
                             violations.append({
                                 "tier": 3,
                                 "cue_id": cue_id,

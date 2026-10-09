@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, UploadCloud, Video, Sparkles, Loader2, FileCheck, Link as LinkIcon, Globe, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import toast from 'react-hot-toast';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -68,9 +69,12 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     }
   };
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setUploadProgress(0);
 
     if (sourceType === 'bilibili') {
       if (!videoUrl.trim()) {
@@ -88,7 +92,6 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
 
     try {
       if (sourceType === 'bilibili') {
-        // Create project directly from URL
         const project = await api.createProjectFromUrl({
           url: videoUrl.trim(),
           title: title.trim() || urlInfo?.title || 'Bilibili Video',
@@ -98,9 +101,9 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         });
 
         onSuccess(project.id);
+        toast.success('Dự án từ Bilibili đã được tạo thành công!');
         onClose();
       } else {
-        // 1. Create project container
         const project = await api.createProject({
           title: title || selectedFile?.name?.replace(/\.[^/.]+$/, '') || 'Video Project',
           description,
@@ -108,20 +111,25 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           target_language: targetLanguage,
         });
 
-        // 2. Upload video file if selected
         if (selectedFile) {
-          await api.uploadVideo(project.id, selectedFile, autoStart);
+          await api.uploadVideo(project.id, selectedFile, autoStart, (progress) => {
+            setUploadProgress(progress);
+          });
         } else if (autoStart) {
           await api.triggerPipeline(project.id);
         }
 
         onSuccess(project.id);
+        toast.success('Khởi tạo dự án thành công!');
         onClose();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Lỗi khi tạo dự án dịch thuật');
+      const msg = err.message || 'Lỗi khi tạo dự án dịch thuật';
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -345,19 +353,34 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
             <button
               type="submit"
               disabled={isLoading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 cursor-pointer"
+              className="relative flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 cursor-pointer overflow-hidden min-w-[200px]"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{sourceType === 'bilibili' ? 'Đang Tải Video Bilibili...' : 'Đang Tạo Dự Án...'}</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>{sourceType === 'bilibili' ? '🚀 Tải Video Bilibili & Bắt Đầu Dịch' : 'Bắt Đầu Dịch Thuật'}</span>
-                </>
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 bg-white/20 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
               )}
+              
+              <div className="relative flex items-center gap-2 z-10">
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>
+                      {sourceType === 'bilibili' 
+                        ? 'Đang Tải Video Bilibili...' 
+                        : uploadProgress > 0 
+                          ? `Đang Tải File Lên (${uploadProgress}%)` 
+                          : 'Đang Tạo Dự Án...'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>{sourceType === 'bilibili' ? '🚀 Tải Video Bilibili & Bắt Đầu Dịch' : 'Bắt Đầu Dịch Thuật'}</span>
+                  </>
+                )}
+              </div>
             </button>
           </div>
         </form>

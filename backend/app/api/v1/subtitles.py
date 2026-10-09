@@ -14,10 +14,60 @@ from app.schemas.translation import RetranslateRequest
 from app.services.guardrails import SubtitleGuardrails
 from app.services.subtitle_generator import subtitle_generator
 from app.services.translation_service import translation_service
+from app.services.storage_service import storage_service
 from app.services.ws_manager import ws_manager
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects/{project_id}/subtitles", tags=["Subtitles"])
+
+
+async def sync_subtitles_on_disk(project_id: str, db: AsyncSession):
+    """Regenerates subtitles.ass and subtitles.srt on disk whenever cues are modified in the DB."""
+    try:
+        proj_res = await db.execute(select(Project).where(Project.id == project_id))
+        project = proj_res.scalar_one_or_none()
+        if not project:
+            return
+
+        cues_res = await db.execute(
+            select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index)
+        )
+        cues = cues_res.scalars().all()
+        if not cues:
+            return
+
+        cues_data = [
+            {
+                "start_time": c.start_time,
+                "end_time": c.end_time,
+                "original_text": c.original_text,
+                "translated_text": c.translated_text or c.original_text,
+                "speaker_tag": c.speaker_tag
+            }
+            for c in cues
+        ]
+
+        proj_cfg = project.settings_override or {}
+        bilingual = proj_cfg.get("bilingual", False)
+        preset = proj_cfg.get("subtitle_preset", "box_banner")
+
+        p_dir = storage_service.get_project_dir(project_id)
+        ass_path = p_dir / "subtitles.ass"
+        srt_path = p_dir / "subtitles.srt"
+
+        ass_content = subtitle_generator.generate_ass(cues_data, bilingual=bilingual, preset=preset)
+        srt_content = subtitle_generator.generate_srt(cues_data)
+
+        await storage_service.write_text_file(ass_path, ass_content)
+        await storage_service.write_text_file(srt_path, srt_content)
+
+        project.subtitles_ass_path = str(ass_path)
+        project.subtitles_srt_path = str(srt_path)
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to auto-sync subtitle files on disk for project {project_id}: {e}")
+
 
 
 @router.get("", response_model=SubtitleListResponse)
@@ -153,6 +203,9 @@ async def update_subtitle_cue(
     await db.commit()
     await db.refresh(cue)
 
+    # Auto-synchronize disk subtitle files (subtitles.ass / subtitles.srt)
+    await sync_subtitles_on_disk(project_id, db)
+
     # Broadcast update to connected studio clients
     await ws_manager.broadcast_to_project(
         project_id,
@@ -161,6 +214,7 @@ async def update_subtitle_cue(
     )
 
     return cue
+
 
 
 @router.post("/retranslate", response_model=List[SubtitleCueResponse])
@@ -264,7 +318,10 @@ async def retranslate_cues(
             updated_items.append(c)
 
     await db.commit()
+    # Auto-synchronize disk subtitle files
+    await sync_subtitles_on_disk(project_id, db)
     return updated_items
+
 
 
 @router.get("/export/{format_type}")

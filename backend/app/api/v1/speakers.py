@@ -160,7 +160,7 @@ async def apply_speaker_preset(
 @router.get("/export")
 async def export_speakers(
     project_id: str,
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """Export speaker profiles and relationship matrix as JSON or CSV."""

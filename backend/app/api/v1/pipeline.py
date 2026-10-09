@@ -5,7 +5,8 @@ from sqlalchemy import select
 
 from app.database import get_db, get_async_session
 from app.models.project import Project
-from app.schemas.translation import PipelineTriggerRequest, PipelineStatusResponse
+from typing import Optional
+from app.schemas.translation import PipelineTriggerRequest, PipelineStatusResponse, BurnOptionsRequest
 from app.services.workflow_engine import workflow_engine
 
 logger = logging.getLogger(__name__)
@@ -31,16 +32,6 @@ async def trigger_pipeline(
 
     background_tasks.add_task(run_bg, project_id, req.stage)
     return {"success": True, "message": f"Pipeline triggered at stage: {req.stage or 'FULL'}"}
-
-
-from pydantic import BaseModel, Field
-from typing import Optional
-
-
-class BurnOptionsRequest(BaseModel):
-    subtitle_preset: Optional[str] = Field("box_banner", description="Style preset: box_banner, cinema, yellow_highlight")
-    bilingual: Optional[bool] = Field(False, description="Enable dual bilingual subtitles")
-    mask_original_sub: Optional[bool] = Field(True, description="Conceal original foreign hardsubs")
 
 
 @router.post("/burn")

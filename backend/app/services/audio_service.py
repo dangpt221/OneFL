@@ -33,14 +33,14 @@ class AudioService:
                 str(output_audio_path)
             ]
             logger.info(f"Running FFmpeg audio extraction: {' '.join(cmd)}")
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            loop = asyncio.get_running_loop()
+            import subprocess
+            proc = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(cmd, capture_output=True)
             )
-            stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                logger.warning(f"FFmpeg extraction warning: {stderr.decode(errors='ignore')}")
+                logger.warning(f"FFmpeg extraction warning: {proc.stderr.decode(errors='ignore')}")
         else:
             # Fallback for dev environment without ffmpeg: create empty or copy placeholder
             logger.info("FFmpeg binary not detected in PATH. Creating placeholder audio track for dev.")

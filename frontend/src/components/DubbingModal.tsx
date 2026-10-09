@@ -14,7 +14,7 @@ interface DubbingModalProps {
 
 export default function DubbingModal({ project, isOpen, onClose, onDubbingStarted, cuesCount }: DubbingModalProps) {
   const [voices, setVoices] = useState<TTSVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>(project.default_voice || 'vieneu-truc-ly');
+  const [selectedVoice, setSelectedVoice] = useState<string>(project.default_voice || 'vi-VN-HoaiMyNeural');
   const [model, setModel] = useState<string>('tts-1');
   const [speed, setSpeed] = useState<number>(1.0);
   const [mixOriginal, setMixOriginal] = useState<boolean>(true);
@@ -242,30 +242,11 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
 
           {/* Review Phim Mode & Audio Mixing */}
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Chế Độ Hòa Âm (Audio Mixing)</h4>
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Chế Độ Hòa Âm &amp; Xử Lý Tiếng Trung Gốc (Audio Mixing)
+            </h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label
-                onClick={() => setMixOriginal(true)}
-                className={`p-3 rounded-lg border flex items-start space-x-3 cursor-pointer transition-all ${mixOriginal
-                  ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/10 shadow-2xs'
-                  : 'border-slate-200 bg-white/60 hover:bg-white'
-                  }`}
-              >
-                <input
-                  type="radio"
-                  checked={mixOriginal}
-                  onChange={() => setMixOriginal(true)}
-                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
-                />
-                <div>
-                  <div className="text-xs font-bold text-slate-900">🎬 Chuẩn Review Phim / Recap</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                    Giữ nhạc nền video gốc ở mức nhỏ (18%) và phủ giọng đọc AI lên trên rõ ràng.
-                  </div>
-                </div>
-              </label>
-
               <label
                 onClick={() => setMixOriginal(false)}
                 className={`p-3 rounded-lg border flex items-start space-x-3 cursor-pointer transition-all ${!mixOriginal
@@ -280,9 +261,33 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
                   className="mt-1 text-indigo-600 focus:ring-indigo-500"
                 />
                 <div>
-                  <div className="text-xs font-bold text-slate-900">🎙️ Chỉ Giọng Lồng Tiếng</div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <span>🚫 Xóa 100% Tiếng Trung Gốc</span>
+                    <span className="text-[9px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.2 rounded-full">Sạch tiếng Trung</span>
+                  </div>
                   <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                    Tắt toàn bộ âm thanh gốc, chỉ phát giọng nói AI theo thời gian phụ đề.
+                    Tắt toàn bộ âm thanh gốc Trung Quốc, video chỉ phát 100% giọng lồng tiếng AI tiếng Việt trong trẻo.
+                  </div>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setMixOriginal(true)}
+                className={`p-3 rounded-lg border flex items-start space-x-3 cursor-pointer transition-all ${mixOriginal
+                  ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/10 shadow-2xs'
+                  : 'border-slate-200 bg-white/60 hover:bg-white'
+                  }`}
+              >
+                <input
+                  type="radio"
+                  checked={mixOriginal}
+                  onChange={() => setMixOriginal(true)}
+                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-slate-900">🎬 Review Phim / Recap (Giữ Nhạc Nền)</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                    Giảm âm thanh gốc xuống nhỏ (15-18%) làm nhạc nền BGM và đè giọng đọc AI tiếng Việt lên trên.
                   </div>
                 </div>
               </label>

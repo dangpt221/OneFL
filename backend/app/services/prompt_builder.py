@@ -11,17 +11,32 @@ class PromptBuilder:
         lang = source_lang.lower()
         if lang in ["en", "english"]:
             return """
-### QUY TẮC DỊCH TIẾNG ANH (ENGLISH -> VIETNAMESE):
-1. ĐẠI TỪ XƯNG HÔ: Tuyệt đối KHÔNG dịch cứng nhắc I/You thành "Tôi/Bạn". Phải căn cứ vào BẢNG HỒ SƠ NHÂN VẬT & QUY TẮC XƯNG HÔ để dịch thành (Anh/Em, Chú/Cháu, Sếp/Em, Bố/Con...).
-2. PHRASAL VERBS & IDIOMS: Dịch thoát ý theo tiếng Việt tự nhiên (VD: "break a leg" -> "chúc may mắn", "call it a day" -> "nghỉ tay thôi").
-3. THUẬT NGỮ CHUYÊN NGÀNH: Giữ nguyên các từ kỹ thuật/công nghệ/tài chính phổ biến (VD: API, Backend, Scale, Frontend, Database, Cache).
+### QUY TẮC DỊCH TIẾNG ANH CHUYÊN SÂU (ENGLISH -> VIETNAMESE):
+1. ĐẠI TỪ XƯNG HÔ ĐỐI THOẠI:
+   - Tuyệt đối KHÔNG dịch cứng nhắc I/You thành "Tôi/Bạn". Phải căn cứ vào BẢNG HỒ SƠ NHÂN VẬT & QUY TẮC XƯNG HÔ để dịch thành cặp xưng hô tiếng Việt tự nhiên (Anh/Em, Chú/Cháu, Sếp/Em, Bố/Con, Cậu/Mình, Mày/Tao...).
+   - Khử đại từ trung tính (We, They) thành "chúng tôi", "chúng ta", "tụi mình", "bọn họ", "bọn chúng" phù hợp với sắc thái cảnh phim.
+2. PHRASAL VERBS, IDIOMS & SLANG (THOÁT NGHĨA ĐIỆN ẢNH):
+   - Dịch thoát ý theo thành ngữ/quán ngữ tiếng Việt tự nhiên, TUYỆT ĐỐI KHÔNG dịch từng chữ (word-by-word):
+     * "break a leg" -> "chúc may mắn nhé" / "diễn tốt nhé".
+     * "bite the bullet" -> "cắn răng chịu đựng" / "đành phải chấp nhận thôi".
+     * "hit the nail on the head" -> "nói chuẩn không cần chỉnh" / "đúng trọng tâm rồi".
+     * "out of the blue" -> "bất thình lình" / "tự nhiên từ trên trời rơi xuống".
+     * "under the weather" -> "hơi mệt trong người" / "thấy khó ở".
+     * "piece of cake" -> "dễ như ăn kẹo" / "chuyện nhỏ như con thỏ".
+     * "call it a day" -> "nghỉ tay thôi" / "hôm nay thế là đủ rồi".
+     * "cost an arm and a leg" -> "đắt cắt cổ" / "tốn cả gia tài".
+3. THUẬT NGỮ CHUYÊN NGÀNH & BẢN ĐỊA HÓA CÔNG NGHỆ / TÀI CHÍNH:
+   - Giữ nguyên các từ kỹ thuật/công nghệ quốc tế quen thuộc (VD: API, Backend, Frontend, Microservices, Database, Cache, CI/CD).
+   - Dịch chuẩn các thuật ngữ kinh doanh/pháp lý (VD: ROI -> tỷ suất hoàn vốn, Due Diligence -> thẩm định chuyên sâu, Search Warrant -> lệnh khám xét).
+4. KHẮC PHỤC THỂ BỊ ĐỘNG CỨNG NHẮC ("TRANSLATIONESE"):
+   - Chuyển câu bị động tiếng Anh sang câu chủ động tiếng Việt (VD: "The code was written by him" -> "Chính anh ấy đã viết đoạn mã đó", tránh dùng "Mã đã bị viết bởi anh ấy").
 """
         elif lang in ["zh", "chinese", "zh-cn", "zh-tw"]:
             return """
 ### QUY TẮC ĐẶC BIỆT BẮT BUỘC KHI DỊCH TIẾNG TRUNG (CHINESE -> VIETNAMESE):
 1. ĐẶC BIỆT CHÚ Ý GIỚI TÍNH & ĐẠI TỪ XƯNG HÔ (CỰC KỲ QUAN TRỌNG):
    - Trong tiếng Trung khẩu ngữ và nhận diện ASR, từ "tā" thường bị viết thành "他" (nam) dù nhân vật trong phim là NỮ ("她")!
-   - BẮT BUỘC PHÂN TÍCH KỸ NGỮ CẢNH HỘI THOẠI để xác định giới tính nhân vật:
+   - BẮT BUỘC PHÂN TÍCH KỸ NGỮ CẢNH HỘI THOẠI & BẢNG HỒ SƠ NHÂN VẬT:
      * Khi nhân vật NỮ nói hoặc đối tượng được nhắc đến là NỮ (như Cố Vãn Chu - 顾晚舟, cô bé, bạn gái, cô gái, nữ sinh):
        TUYỆT ĐỐI KHÔNG dịch thành "anh ta", "anh ấy", "hắn"!
        PHẢI dịch là: "cô ấy", "em ấy", "cô ta", "cô", "em", "nàng".
@@ -30,7 +45,7 @@ class PromptBuilder:
      * Xưng hô với giáo viên (Thầy Lâm / 林老师): "Thầy - em / con".
      * Đối với kẻ địch / phản diện (Bạch Cốt Lâu / 白骨楼): "bọn chúng", "ngươi - ta", "mày - tao".
 
-2. DỊCH SÁT NGHĨA BỐI CẢNH PHIM KHOA HỌC VIỄN TƯỞNG / CƠ GIÁP (MECHA SCI-FI):
+2. PHỤC HỒI TỪ ĐỒNG ÂM ASR & DỊCH SÁT BỐI CẢNH MECHA SCI-FI / KHOA HỌC VIỄN TƯỞNG:
    - Dịch chính xác ngữ cảnh hành động viễn tưởng, TUYỆT ĐỐI KHÔNG dịch nhầm sang nông nghiệp hay đời thường:
      * 垃圾星 (Lạp ky tinh) -> "Tinh cầu rác" hoặc "Hành tinh phế liệu" (KHÔNG dịch máy kéo).
      * 捡垃圾 (Kiểm lạp ky) -> "Nhặt phế liệu" / "Thu gom ve chai cơ giáp" / "Bới rác tinh cầu".
@@ -41,47 +56,99 @@ class PromptBuilder:
      * 联邦 -> "Liên bang".
      * 精神力 -> "Tinh thần lực".
      * 圣金 -> "Thánh Kim" / "Quặng Thánh Kim".
-     * 白骨楼 (hoặc ASR 白酷楼) -> "Bạch Cốt Lâu" (tổ chức phản diện).
+     * 白骨楼 (hoặc ASR nhận nhầm 白酷楼) -> "Bạch Cốt Lâu" (tổ chức phản diện).
      * 顾晚舟 -> "Cố Vãn Chu" (nhân vật NỮ).
      * 牧尘 -> "Mục Thần" (nhân vật NAM chính).
      * 林老师 -> "Thầy Lâm".
-3. VĂN PHONG TỰ NHIÊN, THUẦN VIỆT, SÚC TÍCH:
-   - Câu thoại ngắn gọn, gãy gọn, giàu biểu cảm, phù hợp với nhịp độ phim hoạt hình hành động.
+     * 战舰 -> "Chiến hạm", 虫族 -> "Trùng tộc", 离子炮 -> "Pháo ion".
+
+3. QUY TẮC HÁN-VIỆT VS THUẦN-VIỆT THEO THỂ LOẠI PHIM:
+   - Phim Cổ trang, Kiếm hiệp, Tu tiên: Dùng âm Hán-Việt uy nghiêm (Sư tôn, Đồ nhi, Chưởng môn, Đan điền, Bế quan, Độ kiếp, Bệ hạ, Vi thần).
+   - Phim Hiện đại, Đô thị, Đời sống: BẮT BUỘC dùng từ Thuần-Việt tự nhiên (Ăn cơm, Tiện lợi, Ghen tuông, Bạn thân, Cố lên).
+
+4. CHUYỂN HÓA THÀNH NGỮ 4 CHỮ & TỪ LÓNG HIỆN ĐẠI:
+   - "吃醋" -> "ghen tuông"; "拍马屁" -> "nịnh bợ"; "咸鱼" -> "cá ươn / kẻ buông xuôi"; "躺平" -> "nằm yên buông xuôi"; "破防" -> "suy sụp / vỡ òa"; "吐槽" -> "cà khịa / bóc phốt".
 """
         elif lang in ["ja", "japanese"]:
             return """
-### QUY TẮC DỊCH TIẾNG NHẬT (JAPANESE -> VIETNAMESE):
-1. KÍNH NGỮ (KEIGO):
-   - Sonkeigo/Kenjougo: Dịch với sắc thái trang trọng, thêm kính ngữ "Dạ / Thưa / Vâng / Kính gửi" phù hợp.
-   - Tameguchi (Thân mật): Dịch tự nhiên, thân thiết giữa bạn bè/đồng trang lứa.
-2. HẬU TỐ DANH XƯNG:
+### QUY TẮC DỊCH TIẾNG NHẬT CHUYÊN SÂU (JAPANESE -> VIETNAMESE):
+1. KÍNH NGỮ KEIGO THEO CẤP BẬC XÃ HỘI:
+   - Sonkeigo (Tôn kính ngữ) & Kenjougo (Khiêm nhường ngữ):
+     * Dịch kèm sắc thái trang trọng, thêm kính từ "dạ / thưa / vâng / kính xin" phù hợp vị thế.
+     * "承知いたしました" -> "tôi đã rõ rồi ạ" / "xin ghi nhận ạ".
+     * "よろしくお願いいたします" -> "trăm sự nhờ anh/chị ạ" / "rất mong được giúp đỡ ạ".
+     * "お疲れ様でした" -> "anh/chị đã vất vả rồi ạ".
+   - Tameguchi (Thân mật bạn bè / gia đình): Dịch gần gũi, thoải mái, tự nhiên.
+2. HẬU TỐ DANH XƯNG & QUAN HỆ NHÂN VẬT:
    - '-san' -> Anh / Chị / Bạn [Tên].
+   - '-sama' -> Ngài / Quý khách / Tiểu thư [Tên].
    - '-sensei' -> Thầy / Cô / Bác sĩ [Tên].
    - '-senpai' -> Tiền bối / Anh / Chị [Tên].
+   - '-kohai' -> Hậu bối / Em khóa dưới.
    - '-chan / -kun' -> Bé / Em / Cậu [Tên].
-3. ĐẠI TỪ TỰ XƯNG & GỌI NGƯỜI KHÁC:
-   - Watashi/Watakushi -> Tôi / Em / Mình.
-   - Boku/Ore -> Tôi / Tao / Anh / Mình (tùy độ thân thiết).
+   - 'Aniki' -> Đại ca / Anh hai.
+3. ĐẠI TỪ TỰ XƯNG & KHẨU KHÍ NHÂN VẬT:
+   - Watashi/Watakushi -> Tôi / Em / Con.
+   - Boku/Ore -> Tôi / Cậu / Tao / Anh / Mình (tùy độ thân mật và tình huống).
    - Anata/Omae/Kimi -> Bạn / Cậu / Mày / Em.
+4. TỪ CẢM THÁN & ĐỐI THOẠI ANIME / ĐIỆN ẢNH:
+   - "まさか" -> "không lẽ nào..." / "chẳng lẽ..."; "嘘でしょ" -> "đùa nhau chắc!" / "không thể nào!"; "やれやれ" -> "thật là bó tay luôn".
 """
         elif lang in ["ko", "korean"]:
             return """
-### QUY TẮC DỊCH TIẾNG HÀN (KOREAN -> VIETNAMESE):
+### QUY TẮC DỊCH TIẾNG HÀN CHUYÊN SÂU (KOREAN -> VIETNAMESE):
 1. KÍNH NGỮ (JONDAETMAL) vs THÂN MẬT (BANMAL):
-   - Đuôi câu '-습니다 / -십니까 / -해요' -> Thể hiện sự tôn trọng, thêm "ạ / thưa / vâng".
-   - Đuôi câu '-야 / -어 / -지' -> Xưng hô thân mật giữa bạn bè hoặc người lớn nói với trẻ nhỏ.
+   - Đuôi câu kính ngữ '-습니다 / -십니까 / -해요': Bắt buộc thể hiện sự lễ phép, thêm "dạ / thưa / vâng / ạ".
+     * "알겠습니다" -> "tôi hiểu rồi ạ" / "tôi rõ rồi ạ".
+     * "죄송합니다" -> "tôi vô cùng xin lỗi ạ".
+   - Đuôi câu thân mật '-야 / -어 / -지': Xưng hô thoải mái, dùng đại từ thân thiết hoặc mày/tao tùy ngữ cảnh.
 2. DANH XƯNG XÃ HỘI & GIA ĐÌNH:
-   - Oppa (오빠) -> Anh (nữ gọi nam lớn tuổi thân thiết).
-   - Hyung (형) -> Anh (nam gọi nam lớn tuổi).
-   - Noona (누на) / Unnie (언니) -> Chị.
-   - Sunbae (선배) -> Tiền bối.
+   - Oppa (오빠) -> Anh (nữ gọi bạn trai hoặc anh trai thân thiết).
+   - Hyung (형) -> Anh (nam gọi anh trai hoặc bạn nam lớn tuổi).
+   - Noona (누나) / Unnie (언니) -> Chị.
+   - Sunbae-nim (선배님) -> Tiền bối / Anh/Chị.
+   - Hoobae (후배) -> Hậu bối / Em khóa dưới.
    - Daepyo-nim (대표님) -> Giám đốc / Sếp.
+   - Teamjang-nim (팀장님) -> Trưởng nhóm / Trưởng phòng.
+   - Ajusshi (아저씨) -> Chú / Bác; Ajumma (아줌마) -> Cô / Bác gái.
+3. TỪ LÓNG DRAMA & CẢM THÁN GIỚI TRẺ:
+   - "대박" -> "đỉnh chóp luôn" / "tuyệt vời thật"; "화이팅" -> "cố lên nào!"; "헐" -> "trời đất ơi"; "진짜" -> "thật sao?".
+   - Chaebol -> Tài phiệt; Gapjil -> Thói lộng quyền; Cider -> Hả dạ cực kỳ; Goguma -> Ức chế nghẹn họng.
 """
         else:
             return """
 ### NGUYÊN TẮC DỊCH CHUNG:
 - Văn phong tự nhiên, thuần Việt, đúng ngữ cảnh đối thoại thực tế.
 - Tuân thủ bảng hồ sơ nhân vật và quan hệ xưng hô.
+"""
+
+    @staticmethod
+    def get_video_grounded_translation_rules() -> str:
+        return """
+### NGUYÊN TẮC DỊCH THUẬT DỰA TRÊN NGỮ CẢNH THỊ GIÁC VIDEO (VIDEO-GROUNDED TRANSLATION):
+Khi dịch phụ đề video, văn bản thoại PHẢI hòa quyện tuyệt đối với hình ảnh và diễn biến trên màn hình:
+1. GIẢI MÃ TÍN HIỆU THỊ GIÁC & CẢM XÚC NHÂN VẬT (FACIAL & EMOTIONAL GROUNDING):
+   - Quan sát biểu cảm gương mặt và khẩu hình:
+     * Cười nhếch mép, mỉa mai, trêu ghẹo: Dùng các trợ từ khẩu ngữ tiếng Việt tự nhiên (*cơ đấy, cơ à, đấy nhé, chứ ai, hả*).
+     * Mắt ngấn lệ, nghẹn ngào, thì thầm: Dùng từ ngữ lắng đọng, dịu dàng, tránh dùng từ thô ráp cứng nhắc (*anh xin lỗi, em đừng khóc nữa mà*).
+     * Nhe răng gầm thét, mắt long lên sòng sọc, cầm vũ khí: Dùng khẩu khí đanh thép, bộc trực (*chết tiệt, cút ngay, đồ khốn, tao sẽ tiêu diệt mày*).
+     * Cúi gập người, hai tay đan chéo cung kính: Dùng kính ngữ lễ phép (*dạ, thưa anh, xin sếp yên tâm ạ*).
+
+2. KHOẢNG CÁCH KHÔNG GIAN & VỊ THẾ XÃ HỘI (PROXEMICS & HIERARCHY):
+   - Cảnh cận cảnh / hai người ôm nhau hoặc đứng sát nhau: Không dùng đại từ xa cách "tôi - cô", mà dùng "anh - em", "mình - cậu".
+   - Cảnh phòng họp lớn / đứng trước bàn làm việc của cấp trên: Giữ vững tôn ti công sở "sếp - em", "giám đốc - tôi".
+   - Cảnh chiến trường / hai bên đứng đối mặt rút gươm/súng: Dùng cặp xưng hô đối đầu ("ngươi - ta", "mày - tao", "bọn mày - bọn tao").
+
+3. ĐỒNG BỘ HÀNH ĐỘNG THỰC TẾ & KHỬ TỪ ĐA NGHĨA (MULTIMODAL DISAMBIGUATION):
+   - Từ đa nghĩa tiếng Anh/Trung/Nhật/Hàn BẮT BUỘC phải đối chiếu với vật thể nhân vật đang tương tác:
+     * "Fire!": Nếu nhân vật cầm súng hoặc pháo đài -> Dịch là "Bắn!" / "Khai hỏa!", TUYỆT ĐỐI KHÔNG dịch "Lửa!".
+     * "Bank": Nếu nhân vật đứng bên bờ suối -> Dịch "bờ sông/bờ suối"; nếu đứng trước tòa nhà tài chính -> Dịch "ngân hàng".
+     * "Strike": Cảnh máy bay bay qua thả bom -> Dịch "không kích"; cảnh công nhân giơ băng rôn -> Dịch "đình công"; cảnh thi đấu võ/bowling -> Dịch "tung đòn / ghi điểm tuyệt đối".
+     * Tiếng Trung "打" (dǎ): Cầm gậy/nắm đấm -> "Đánh!"; cầm điện thoại -> "Gọi điện"; cầm vé -> "Mua vé/Bấm vé"; gõ bàn phím -> "Gõ/Nhập dữ liệu".
+
+4. ĐỒNG BỘ NHỊP ĐIỆU PHỤ ĐỀ VỚI NHỊP CẮT DỰNG CỦA PHIM (PACING & READING COMFORT):
+   - Cảnh hành động chớp nhoáng (Fast-paced scene, nhiều jump cut): Dịch câu ngắn gọn, dứt khoát, không dùng từ đệm rườm rà để khán giả kịp đọc dưới 18 CPS.
+   - Cảnh sâu lắng, tự sự dài (Slow-paced, long take): Dịch uyển chuyển, giàu tính văn học và âm điệu tiếng Việt.
 """
 
     @classmethod
@@ -264,7 +331,8 @@ C. NGUYÊN TẮC SUY LUẬN ĐỐI THOẠI QUA LẠI KHI CÙNG MÃ SPEAKER:
         relationship_matrix: Optional[Dict[str, Any]] = None,
         glossary: Optional[Dict[str, str]] = None,
         previous_context: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        video_context: Optional[str] = None
     ) -> Dict[str, str]:
         """Generate system prompt and user prompt for LLM."""
         
@@ -273,6 +341,8 @@ C. NGUYÊN TẮC SUY LUẬN ĐỐI THOẠI QUA LẠI KHI CÙNG MÃ SPEAKER:
 Nhiệm vụ: Dịch danh sách phụ đề video từ ngôn ngữ [{source_lang.upper()}] sang [{target_lang.upper()}].
 
 {cls.get_language_specific_rules(source_lang)}
+
+{cls.get_video_grounded_translation_rules()}
 
 {cls.get_semantic_nuance_rules()}
 
@@ -296,25 +366,29 @@ Trả về DUY NHẤT một JSON Object hợp lệ theo cấu trúc sau, không 
         # Build Context Components for User Prompt
         context_parts = []
 
-        # 1. Speaker Profiles & Pronouns (Imperative Directives)
+        # 1. Video Visual Context if available
+        if video_context:
+            context_parts.append(f"### [BỐI CẢNH & TÍN HIỆU THỊ GIÁC VIDEO (VIDEO VISUAL CONTEXT)]:\n{video_context}")
+
+        # 2. Speaker Profiles & Pronouns (Imperative Directives)
         speaker_rules = cls.format_speaker_and_relationship_rules(speaker_profiles, relationship_matrix)
         if speaker_rules:
             context_parts.append(speaker_rules)
 
-        # 2. Glossary (Mandatory Directives)
+        # 3. Glossary (Mandatory Directives)
         glossary_rules = cls.format_glossary_rules(glossary)
         if glossary_rules:
             context_parts.append(glossary_rules)
 
-        # 3. Previous Context
+        # 4. Previous Context
         if previous_context and len(previous_context) > 0:
-            context_parts.append(f"### [3. NGỮ CẢNH HỘI THOẠI VỪA DIỄN RA (5 CÂU TRƯỚC ĐÓ ĐỂ GIỮ MẠCH NỘI DUNG)]:\n{json.dumps(previous_context, ensure_ascii=False, indent=2)}")
+            context_parts.append(f"### [4. NGỮ CẢNH HỘI THOẠI VỪA DIỄN RA (5 CÂU TRƯỚC ĐÓ ĐỂ GIỮ MẠCH NỘI DUNG)]:\n{json.dumps(previous_context, ensure_ascii=False, indent=2)}")
 
-        # 4. Custom Instructions if any
+        # 5. Custom Instructions if any
         if custom_instructions:
-            context_parts.append(f"### [4. YÊU CẦU ĐẶC BIỆT TỪ NGƯỜI DÙNG]:\n{custom_instructions}")
+            context_parts.append(f"### [5. YÊU CẦU ĐẶC BIỆT TỪ NGƯỜI DÙNG]:\n{custom_instructions}")
 
-        # 5. Target cues to translate
+        # 6. Target cues to translate
         context_parts.append(f"### [DANH SÁCH PHỤ ĐỀ CẦN DỊCH NGAY ({len(cues_to_translate)} CÂU)]:\n{json.dumps(cues_to_translate, ensure_ascii=False, indent=2)}")
 
         user_prompt = "\n\n".join(context_parts)

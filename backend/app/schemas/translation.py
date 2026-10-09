@@ -38,6 +38,15 @@ class PipelineTriggerRequest(BaseModel):
     force_reprocess: bool = False
 
 
+class BurnOptionsRequest(BaseModel):
+    subtitle_preset: Optional[str] = Field("box_banner", description="Style preset: box_banner, cinema, yellow_highlight")
+    bilingual: Optional[bool] = Field(False, description="Enable dual bilingual subtitles")
+    mask_original_sub: Optional[bool] = Field(True, description="Conceal original foreign hardsubs")
+    clean_chinese_mode: Optional[str] = Field("cinema_bars", description="Clean Chinese mode: cinema_bars, bottom_bar, smart_blur, cinema_zoom, none")
+    top_mask_pct: Optional[float] = Field(11.0, description="Top mask height in percentage (e.g. 11.0 for 11%)")
+    bottom_mask_pct: Optional[float] = Field(15.0, description="Bottom mask height in percentage (e.g. 15.0 for 15%)")
+
+
 class PipelineStatusResponse(BaseModel):
     project_id: str
     status: str
@@ -46,3 +55,4 @@ class PipelineStatusResponse(BaseModel):
     error_message: Optional[str] = None
     active_workers: int = 0
     estimated_time_remaining_seconds: Optional[int] = None
+

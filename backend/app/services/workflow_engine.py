@@ -156,14 +156,17 @@ class WorkflowEngine:
                             SpeakerProfile.speaker_tag == spk_tag
                         ))
                         if not existing.scalar_one_or_none():
+                            gender = spk_info.get("gender", "unknown")
+                            default_spk_voice = "vi-VN-NamMinhNeural" if gender == "male" else (project.default_voice or "vi-VN-HoaiMyNeural")
                             db.add(SpeakerProfile(
                                 project_id=project_id,
                                 speaker_tag=spk_tag,
                                 display_name=spk_info.get("display_name"),
-                                gender=spk_info.get("gender", "unknown"),
+                                gender=gender,
                                 age_group=spk_info.get("age_group", "adult"),
                                 role=spk_info.get("role"),
-                                tone=spk_info.get("tone")
+                                tone=spk_info.get("tone"),
+                                tts_voice=spk_info.get("tts_voice") or default_spk_voice
                             ))
 
                     # Update or insert relationships
@@ -348,9 +351,15 @@ class WorkflowEngine:
         except Exception as e:
             logger.error(f"Pipeline error for project {project_id}: {e}", exc_info=True)
             project.status = "FAILED"
-            project.error_message = str(e)
+            
+            # str(e) can be empty for built-in exceptions like NotImplementedError or ValueError()
+            err_msg = str(e)
+            if not err_msg:
+                err_msg = f"Lỗi hệ thống ({type(e).__name__})"
+                
+            project.error_message = err_msg
             await db.commit()
-            await ws_manager.broadcast_to_project(project_id, "PIPELINE_ERROR", {"error": str(e)})
+            await ws_manager.broadcast_to_project(project_id, "PIPELINE_ERROR", {"error": err_msg})
 
     @classmethod
     async def burn_project_video(cls, db: AsyncSession, project_id: str):
@@ -398,7 +407,98 @@ class WorkflowEngine:
             bilingual_mode = proj_cfg.get("bilingual", False)
             sub_preset = proj_cfg.get("subtitle_preset", "box_banner")
             mask_sub = proj_cfg.get("mask_original_sub", True)
+            clean_mode = proj_cfg.get("clean_chinese_mode", "cinema_bars" if mask_sub else "none")
+            top_mask_pct = float(proj_cfg.get("top_mask_pct", 11.0)) / 100.0
+            bottom_mask_pct = float(proj_cfg.get("bottom_mask_pct", 15.0)) / 100.0
 
+            # 1. Total Duration
+            total_dur = project.video_duration_seconds
+            if not total_dur or total_dur <= 0:
+                total_dur = await asyncio.to_thread(asr_service.get_audio_duration, video_path)
+                if not total_dur or total_dur <= 0:
+                    total_dur = 3600.0  # Fallback
+
+            CHUNK_DUR = 600.0  # 10 phút mỗi chunk
+            num_chunks = max(1, int(total_dur // CHUNK_DUR) + (1 if total_dur % CHUNK_DUR > 0 else 0))
+            sem = asyncio.Semaphore(2)  # Max 2 NVENC sessions concurrently
+
+            async def process_chunk(idx: int):
+                async with sem:
+                    chunk_start = idx * CHUNK_DUR
+                    chunk_dur = min(CHUNK_DUR, total_dur - chunk_start)
+                    if chunk_dur <= 0.1: return None
+                    
+                    # Cập nhật tiến độ
+                    pct = 85 + int(((idx + 1) / num_chunks) * 10)
+                    project.progress_percentage = pct
+                    project.error_message = f"Đang burn chunk {idx+1}/{num_chunks}..."
+                    await db.commit()
+                    await ws_manager.broadcast_to_project(project_id, "PROGRESS_UPDATE", {
+                        "progress": pct, "percentage": pct, "message": project.error_message
+                    })
+
+                    # A. Cắt raw chunk
+                    raw_chunk_path = p_dir / f"raw_chunk_{idx}.mp4"
+                    ffmpeg_bin = settings.get_ffmpeg_bin()
+                    cut_cmd = [
+                        ffmpeg_bin, "-y", "-ss", str(chunk_start), "-t", str(chunk_dur),
+                        "-i", str(video_path), "-c", "copy", str(raw_chunk_path)
+                    ]
+                    proc = await asyncio.create_subprocess_exec(*cut_cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                    await proc.communicate()
+
+                    # B. Tạo ASS cho chunk (đã offset thời gian)
+                    chunk_cues = []
+                    for c in db_cues:
+                        if c.end_time >= chunk_start and c.start_time <= chunk_start + chunk_dur:
+                            chunk_cues.append({
+                                "start_time": max(0.0, c.start_time - chunk_start),
+                                "end_time": c.end_time - chunk_start,
+                                "original_text": c.original_text,
+                                "translated_text": c.translated_text or c.original_text,
+                                "speaker_tag": c.speaker_tag
+                            })
+                    
+                    chunk_ass_path = p_dir / f"chunk_{idx}.ass"
+                    chunk_ass_content = subtitle_generator.generate_ass(chunk_cues, bilingual=bilingual_mode, preset=sub_preset)
+                    await storage_service.write_text_file(chunk_ass_path, chunk_ass_content)
+
+                    # C. Burn phụ đề
+                    burned_chunk_path = p_dir / f"burned_chunk_{idx}.mp4"
+                    if raw_chunk_path.exists():
+                        await video_burner.burn_subtitles_to_video(
+                            video_path=raw_chunk_path,
+                            ass_subtitle_path=chunk_ass_path,
+                            output_video_path=burned_chunk_path,
+                            mask_original_sub=mask_sub,
+                            clean_chinese_mode=clean_mode,
+                            top_mask_pct=top_mask_pct,
+                            bottom_mask_pct=bottom_mask_pct
+                        )
+                    
+                    # Dọn dẹp
+                    if raw_chunk_path.exists(): raw_chunk_path.unlink()
+                    if chunk_ass_path.exists(): chunk_ass_path.unlink()
+                    
+                    return burned_chunk_path
+
+            tasks = [process_chunk(i) for i in range(num_chunks)]
+            results = await asyncio.gather(*tasks)
+            burned_chunks = [r for r in results if r and r.exists()]
+
+            if burned_chunks:
+                project.error_message = "Đang nối các chunk (Lossless Concat)..."
+                await db.commit()
+                await video_burner.lossless_concat_chunks(burned_chunks, output_burned)
+                
+                # Cleanup burned chunks
+                for bc in burned_chunks:
+                    if bc.exists(): bc.unlink()
+            
+            project.burned_video_path = str(output_burned)
+            project.burned_video_url = storage_service.get_relative_url(output_burned)
+
+            # Khôi phục ASS tổng để tải xuống (nếu có)
             ass_content = subtitle_generator.generate_ass([
                 {
                     "start_time": c.start_time,
@@ -411,15 +511,6 @@ class WorkflowEngine:
             ], bilingual=bilingual_mode, preset=sub_preset)
             await storage_service.write_text_file(ass_path, ass_content)
             project.subtitles_ass_path = str(ass_path)
-
-            await video_burner.burn_subtitles_to_video(
-                video_path=video_path,
-                ass_subtitle_path=ass_path,
-                output_video_path=output_burned,
-                mask_original_sub=mask_sub
-            )
-            project.burned_video_path = str(output_burned)
-            project.burned_video_url = storage_service.get_relative_url(output_burned)
 
             project.status = "COMPLETED"
             project.current_stage = "COMPLETED"

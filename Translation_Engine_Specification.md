@@ -246,3 +246,45 @@ Nhiệm vụ của bạn là dịch danh sách các câu thoại phụ đề t�
 | **Text Wrapping & CPS Engine** | `pysubs2` + Custom Rule Engine | Tính toán thời gian hiển thị, ngắt dòng phụ đề chuẩn `.ass` |
 | **Pronoun Memory & Glossary Store**| PostgreSQL JSONB / Redis | Lưu trữ hồ sơ nhân vật và thuật ngữ xuyên suốt 10 tiếng video |
 | **LLM Inference** | `google-generativeai` & `openai` SDKs | Gọi Gemini 2.5 Flash (Primary) và GPT-4o-mini (Fallback) |
+
+---
+
+## 6. CẨM NANG DỊCH THUẬT TIẾNG VIỆT CHUYÊN SÂU DỰA TRÊN NGỮ CẢNH VIDEO (VIDEO-GROUNDED TRANSLATION HANDBOOK)
+
+Một bản dịch phụ đề điện ảnh xuất sắc không đơn thuần là chuyển đổi ngôn ngữ văn bản (Text-to-Text), mà là **nghệ thuật hòa quyện đa phương thức (Multimodal Fusion)** giữa **Hình ảnh (Visual) - Âm thanh (Audio) - Câu chữ phụ đề (Subtitle)**. 
+
+### 6.1. Bốn Nguyên Lý Dịch Thuật Thị Giác (The 4 Visual Translation Axioms)
+
+#### 1. Khớp Cảm Xúc & Khẩu Khí Nhân Vật (Facial & Emotional Grounding)
+Tiếng Việt là ngôn ngữ giàu trợ từ cảm thán và sắc thái biểu cảm. Dựa vào hình ảnh trên màn hình để thêm các hư từ phù hợp:
+* **Nhân vật cười nhếch mép, châm chọc, khoanh tay:** Thêm các trợ từ mang sắc thái thách thức hoặc trêu chọc (*"cơ đấy", "cơ à", "đấy nhé", "chứ ai", "hả"*).
+  * *Ví dụ (EN):* "You think you can beat me?" $\rightarrow$ *"Mày nghĩ mày thắng nổi tao cơ à?"* (thay vì dịch máy khô khan: *"Bạn nghĩ bạn có thể đánh bại tôi?"*).
+* **Nhân vật nghẹn ngào, mắt ngấn lệ, nhìn xa xăm:** Dịch mềm mại, nhịp câu chậm, giàu cảm xúc (*"anh xin lỗi", "đừng khóc nữa mà em"*).
+* **Nhân vật gầm thét, nhe răng, cầm vũ khí lao tới:** Dùng câu ngắn gọn, dứt khoát, âm điệu bộc trực (*"Chết tiệt!", "Cút ngay!", "Tao sẽ nghiền nát mày!"*).
+* **Nhân vật cúi đầu 90 độ, hai tay cung kính:** Thêm kính ngữ chuẩn mực (*"Dạ, thưa sếp", "Xin giám đốc yên tâm ạ"*).
+
+#### 2. Định Vị Khoảng Cách Không Gian & Vị Thế Xã Hội (Proxemics & Hierarchy)
+* **Cảnh cận cảnh (Close-up) / Ôm nhau / Đứng sát nhau:** Chuyển ngay sang đại từ thân mật (*"anh - em", "mình - cậu"*), tuyệt đối không dùng đại từ xa cách (*"tôi - bạn", "anh ta - cô ta"*).
+* **Cảnh phòng họp / Đứng trước bàn giám đốc:** Duy trì nghiêm ngặt tôn ti công sở (*"sếp - em", "giám đốc - tôi", "trưởng phòng - em"*).
+* **Cảnh chiến trường / Rút vũ khí đối đầu:** Dùng cặp xưng hô thù địch (*"ngươi - ta", "mày - tao", "bọn chúng - bọn tao"*).
+
+#### 3. Khử Từ Đa Nghĩa Nhờ Vật Thể & Hành Động Trên Màn Hình (Multimodal Disambiguation)
+Nhiều từ vựng trong tiếng Anh, Trung, Nhật, Hàn có nghĩa đa dạng tùy theo hành động:
+* **"Fire!" (EN):** Nếu thấy nhân vật cầm súng/pháo đài $\rightarrow$ Dịch *"Bắn!"* hoặc *"Khai hỏa!"*; nếu thấy đám cháy bùng lên $\rightarrow$ Dịch *"Cháy rồi!"*.
+* **"Bank" (EN):** Nếu thấy cảnh bờ cỏ, nước chảy $\rightarrow$ Dịch *"bờ sông/bờ suối"*; nếu thấy tòa nhà tài chính/ATM $\rightarrow$ Dịch *"ngân hàng"*.
+* **"打" (ZH - Dǎ):** Nếu nhân vật cầm gậy $\rightarrow$ *"Đánh!"*; nếu cầm điện thoại $\rightarrow$ *"Gọi điện"*; nếu đứng trước quầy vé $\rightarrow$ *"Mua vé"*; nếu ngồi trước bàn phím $\rightarrow$ *"Gõ máy"*.
+* **"他" vs "她" (ZH - Tā):** Khẩu ngữ tiếng Trung đều phát âm là "tā", ASR thường nhận nhầm thành chữ "他" (nam). Bắt buộc nhìn hình ảnh nhân vật nữ để dịch thành *"cô ấy, em ấy, nàng"*, cấm dịch *"anh ấy, hắn"*.
+
+#### 4. Điều Chỉnh Tốc Độ Đọc Theo Nhịp Cắt Dựng (Pacing & CPS Alignment)
+* **Cảnh hành động dồn dập (Fast cut, nhiều góc máy):** Khán giả mắt phải bận theo dõi chuyển động, phụ đề bắt buộc phải tinh gọn, dịch thoát ý, độ dài $\le 30$ ký tự, tốc độ đọc $\le 16$ CPS để không làm người xem mỏi mắt.
+* **Cảnh tự sự, độc thoại chậm rãi (Long take):** Dịch trọn vẹn ý tứ, sử dụng ngôn từ trau chuốt, giàu hình ảnh.
+
+---
+
+### 6.2. Từ Điển Thuật Ngữ Chuẩn Mực (Master Glossary Reference)
+Toàn bộ 1000+ thuật ngữ chuẩn mực được lưu trữ tại [`backend/app/resources/glossary_master.json`](file:///D:/OneFL/backend/app/resources/glossary_master.json) với 4 ngôn ngữ nguồn chính:
+* **Tiếng Anh (EN $\rightarrow$ VI):** Thuật ngữ phần mềm, kinh tế tài chính, thành ngữ điện ảnh, từ lóng pháp luật/điều tra.
+* **Tiếng Trung (ZH $\rightarrow$ VI):** Cơ giáp khoa học viễn tưởng, tiên hiệp/kiếm hiệp cổ trang, từ lóng giới trẻ đô thị, khử lỗi ASR đồng âm.
+* **Tiếng Nhật (JA $\rightarrow$ VI):** Kính ngữ Keigo công sở, danh xưng nhân vật, hoạt hình hành động Anime, thán từ đời thường.
+* **Tiếng Hàn (KO $\rightarrow$ VI):** Kính ngữ Jondaetmal vs Banmal, tôn ti gia tộc & công sở, từ lóng K-Drama (Chaebol, Gapjil, Cider, Goguma).
+

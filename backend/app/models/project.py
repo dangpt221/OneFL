@@ -26,7 +26,7 @@ class Project(Base):
     dubbed_video_path = Column(Text, nullable=True)
     dubbed_audio_url = Column(Text, nullable=True)
     dubbed_audio_path = Column(Text, nullable=True)
-    default_voice = Column(String(50), default="nova")
+    default_voice = Column(String(50), default="vi-VN-HoaiMyNeural")
     subtitles_ass_path = Column(Text, nullable=True)
     subtitles_srt_path = Column(Text, nullable=True)
 

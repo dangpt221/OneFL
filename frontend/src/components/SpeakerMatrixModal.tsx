@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   X, Users, ArrowRight, Save, Plus, Trash2,
   Download, Upload, Sparkles, RefreshCw, FolderDown,
   Volume2, ShieldAlert, Check, Loader2, MessageSquare
 } from 'lucide-react';
-import { SpeakerProfile, RelationshipMatrix } from '@/lib/types';
+import { SpeakerProfile, RelationshipMatrix, TTSVoice } from '@/lib/types';
 import { api } from '@/lib/api';
 
 interface SpeakerMatrixModalProps {
@@ -34,6 +34,55 @@ export default function SpeakerMatrixModal({
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   const [isApplyingMatrix, setIsApplyingMatrix] = useState(false);
   const [matrixSuccessMsg, setMatrixSuccessMsg] = useState<string | null>(null);
+
+  // Dynamic Voices State & Audio Preview
+  const [voices, setVoices] = useState<TTSVoice[]>([]);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const [previewLoadingVoice, setPreviewLoadingVoice] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Synchronize state when modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      setEditingSpeakers(speakers);
+      setEditingRels(relationships);
+      api.getTTSVoices()
+        .then((data) => setVoices(data))
+        .catch((err) => console.error('Failed to load TTS voices:', err));
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setPreviewingVoice(null);
+    }
+  }, [isOpen, speakers, relationships]);
+
+  const handlePlayVoicePreview = async (voiceId: string) => {
+    try {
+      if (previewingVoice === voiceId) {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        setPreviewingVoice(null);
+        return;
+      }
+      setPreviewLoadingVoice(voiceId);
+      const res = await api.previewTTSVoice(voiceId, 1.0);
+      setPreviewLoadingVoice(null);
+      if (res && res.preview_url) {
+        if (audioRef.current) {
+          audioRef.current.src = res.preview_url;
+          audioRef.current.play();
+          setPreviewingVoice(voiceId);
+        }
+      }
+    } catch (e) {
+      setPreviewLoadingVoice(null);
+      setPreviewingVoice(null);
+    }
+  };
 
   // New Speaker Form State
   const [showAddSpeaker, setShowAddSpeaker] = useState(false);
@@ -324,6 +373,13 @@ export default function SpeakerMatrixModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      {/* Hidden audio element for TTS preview playback */}
+      <audio
+        ref={audioRef}
+        onEnded={() => setPreviewingVoice(null)}
+        onError={() => setPreviewingVoice(null)}
+        className="hidden"
+      />
       <div className="bg-white w-full max-w-4xl rounded-3xl p-6 relative border border-slate-200 shadow-2xl max-h-[92vh] flex flex-col">
         {/* Close Button */}
         <button
@@ -605,21 +661,90 @@ export default function SpeakerMatrixModal({
                     <label className="block text-[10px] uppercase font-bold text-indigo-700 mb-1">
                       Giọng Lồng Tiếng AI (TTS Voice)
                     </label>
-                    <select
-                      value={spk.tts_voice || 'vi-VN-HoaiMyNeural'}
-                      onChange={(e) => handleSpeakerChange(spk.speaker_tag, 'tts_voice', e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-indigo-50/50 border border-indigo-200 text-xs font-semibold text-slate-900 focus:outline-none shadow-xs"
-                    >
-                      <option value="vi-VN-HoaiMyNeural">🌸 Hoài My (Nữ - Tự Nhiên & Truyền Cảm ⭐)</option>
-                      <option value="vi-VN-HoaiMyAnime">✨ Hoài My Anime (Nữ - Ngọt Ngào & Trong Trẻo)</option>
-                      <option value="vi-VN-HoaiMyNarrator">📖 Hoài My Thuyết Minh (Nữ - Sâu Lắng)</option>
-                      <option value="vi-VN-NamMinhNeural">🌴 Nam Minh (Nam - Miền Bắc Đĩnh Đạc)</option>
-                      <option value="nova">🌸 Nova (Nữ - OpenAI Chuẩn Điện Ảnh)</option>
-                      <option value="shimmer">✨ Shimmer (Nữ - OpenAI Dịu Dàng)</option>
-                      <option value="alloy">🎙️ Alloy (Nữ/Trung Tính - Hiện Đại)</option>
-                      <option value="onyx">🎬 Onyx (Nam - Trầm Hùng & Uy Lực)</option>
-                      <option value="gtts-female-vi">🌺 Mai Lan (Nữ - Google Voice)</option>
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')}
+                        onChange={(e) => handleSpeakerChange(spk.speaker_tag, 'tts_voice', e.target.value)}
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl bg-indigo-50/50 border border-indigo-200 text-xs font-semibold text-slate-900 focus:outline-none shadow-xs truncate"
+                      >
+                        {voices.length > 0 ? (
+                          <>
+                            <optgroup label="🌟 VieNeu Acoustic (Biểu Cảm & Thu Hút Cao)">
+                              {voices.filter(v => v.provider === 'vieneu').map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="⚡ Microsoft Edge Neural (Chuẩn Mực & Miễn Phí)">
+                              {voices.filter(v => v.provider === 'edge-tts').map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="🎙️ Google Voice">
+                              {voices.filter(v => v.provider === 'gtts').map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="🎬 OpenAI TTS (Yêu cầu API Key)">
+                              {voices.filter(v => v.provider === 'openai').map(v => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </>
+                        ) : (
+                          <>
+                            <optgroup label="🌟 VieNeu Acoustic (Biểu Cảm Cao)">
+                              <option value="vieneu-thuy-dung">✨ Thùy Dung (Nữ · Trẻ Trung / Hoạt Bát)</option>
+                              <option value="vieneu-ngoc-huyen">✨ Ngọc Huyền (Nữ · Review Hoạt Hình 3D & Tu Tiên ⭐)</option>
+                              <option value="vieneu-ngoc-linh">📖 Ngọc Linh (Nữ · Bắc - Trầm Đằm / Recap)</option>
+                              <option value="vieneu-my-duyen">🍯 Mỹ Duyên (Nữ · Ngọt Ngào & Dịu Dàng)</option>
+                              <option value="vieneu-mai-anh">📰 Mai Anh (Nữ · Thời Sự & Phóng Sự)</option>
+                              <option value="vieneu-minh-quan">🎬 Minh Quân (Nam · Bắc - Trầm Vang Điện Ảnh ⭐)</option>
+                              <option value="vieneu-xuan-vinh">⚡ Xuân Vĩnh (Nam · Bắc - Trẻ Trung & Hài Hước)</option>
+                              <option value="vieneu-thanh-binh">📻 Thanh Bình (Nam · Bắc - Sâu Lắng & Radio)</option>
+                            </optgroup>
+                            <optgroup label="⚡ Microsoft Edge Neural (Chuẩn Mực & Miễn Phí)">
+                              <option value="vi-VN-HoaiMyNeural">🌸 Hoài My (Nữ · Bắc - Truyền Cảm & Tự Nhiên ⭐)</option>
+                              <option value="vi-VN-NamMinhNeural">🌴 Nam Minh (Nam · Bắc - Chuẩn Mực Microsoft)</option>
+                            </optgroup>
+                            <optgroup label="🎙️ Google Voice">
+                              <option value="gtts-female-vi">🎙️ Mai Lan (Nữ · Google Voice)</option>
+                            </optgroup>
+                            <optgroup label="🎬 OpenAI TTS (Yêu cầu API Key)">
+                              <option value="nova">✨ Nova (Nữ · OpenAI Điện Ảnh)</option>
+                              <option value="onyx">🎬 Onyx (Nam · OpenAI Trầm Hùng)</option>
+                            </optgroup>
+                          </>
+                        )}
+                      </select>
+
+                      {/* Nút Nghe Thử Giọng Ngay Lập Tức */}
+                      <button
+                        type="button"
+                        onClick={() => handlePlayVoicePreview(spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural'))}
+                        disabled={previewLoadingVoice !== null}
+                        title="Nghe thử giọng này"
+                        className="px-2.5 py-1.5 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1 shrink-0 shadow-2xs"
+                      >
+                        {previewLoadingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')) ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : previewingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')) ? (
+                          <span className="text-red-600 font-extrabold text-[11px]">⏹️ Dừng</span>
+                        ) : (
+                          <>
+                            <Volume2 className="w-3.5 h-3.5" />
+                            <span className="text-[11px] hidden sm:inline">Thử</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="col-span-7">

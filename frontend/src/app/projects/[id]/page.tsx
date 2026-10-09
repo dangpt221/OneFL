@@ -11,11 +11,14 @@ import {
   Download,
   Loader2,
   Sparkles,
+  ChevronDown,
+  CheckCircle2,
 } from 'lucide-react';
+
 import { Project, SubtitleCue, SpeakerProfile, RelationshipMatrix, GlossaryTerm } from '@/lib/types';
 import { api } from '@/lib/api';
 import { useProjectWebSocket } from '@/lib/useWebSocket';
-import VideoPlayer from '@/components/VideoPlayer';
+import VideoPlayer, { CleanChineseMode } from '@/components/VideoPlayer';
 import SubtitleEditor from '@/components/SubtitleEditor';
 import SpeakerMatrixModal from '@/components/SpeakerMatrixModal';
 import GlossaryModal from '@/components/GlossaryModal';
@@ -36,6 +39,8 @@ export default function ProjectStudioPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [seekTarget, setSeekTarget] = useState<number | null>(null);
   const [activeVideoSource, setActiveVideoSource] = useState<'auto' | 'burned' | 'dubbed' | 'original'>('auto');
+  const [cleanChineseMode, setCleanChineseMode] = useState<CleanChineseMode>('cinema_bars');
+
 
   // Modals
   const [isSpeakerModalOpen, setIsSpeakerModalOpen] = useState(false);
@@ -133,7 +138,14 @@ export default function ProjectStudioPage() {
     }
   };
 
-  const handleBurnStarted = async (options?: { subtitle_preset?: string; bilingual?: boolean; mask_original_sub?: boolean }) => {
+  const handleBurnStarted = async (options?: {
+    subtitle_preset?: string;
+    bilingual?: boolean;
+    mask_original_sub?: boolean;
+    clean_chinese_mode?: string;
+    top_mask_pct?: number;
+    bottom_mask_pct?: number;
+  }) => {
     try {
       await api.startBurning(projectId, options);
       loadAllData();
@@ -289,9 +301,86 @@ export default function ProjectStudioPage() {
               <Flame className="w-3.5 h-3.5" />
               <span>Burn Video</span>
             </button>
+
+            {/* Primary Download Completed Video Button */}
+            {(project.burned_video_url || project.dubbed_video_url) ? (
+              <div className="relative group">
+                <a
+                  href={project.burned_video_url || project.dubbed_video_url}
+                  download
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition-all cursor-pointer hover:scale-[1.03] active:scale-[0.98] ring-2 ring-emerald-400/40"
+                  title="Tải video hoàn thiện về máy tính"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>📥 Tải Video</span>
+                  <ChevronDown className="w-3 h-3 text-emerald-100" />
+                </a>
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-2xl border border-slate-200 p-2 hidden group-hover:block z-40 shadow-2xl animate-in fade-in">
+                  <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Lựa chọn file tải về
+                  </div>
+                  {project.burned_video_url && (
+                    <a
+                      href={project.burned_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                    >
+                      <span className="text-base">🔥</span>
+                      <div className="text-left">
+                        <div>Video Đã Burn Sub (.mp4)</div>
+                        <div className="text-[10px] text-slate-500 font-normal">Khuyên dùng · Đã xóa chữ Trung & lồng tiếng</div>
+                      </div>
+                    </a>
+                  )}
+                  {project.dubbed_video_url && (
+                    <a
+                      href={project.dubbed_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                    >
+                      <span className="text-base">🎙️</span>
+                      <div className="text-left">
+                        <div>Video Lồng Tiếng AI (.mp4)</div>
+                        <div className="text-[10px] text-slate-500 font-normal">Chỉ phối giọng đọc tiếng Việt</div>
+                      </div>
+                    </a>
+                  )}
+                  {project.dubbed_audio_url && (
+                    <a
+                      href={project.dubbed_audio_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm">🎵</span>
+                      <span>Audio Lồng Tiếng (.mp3)</span>
+                    </a>
+                  )}
+                  {project.original_video_url && (
+                    <a
+                      href={project.original_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm">📹</span>
+                      <span>Video Gốc (.mp4)</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                disabled
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold border border-slate-200 cursor-not-allowed opacity-70"
+                title="Nút tải sẽ tự động bật khi bạn hoàn tất lồng tiếng hoặc burn video"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải Video (Chưa hoàn thiện)</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
+
 
       {/* Live Pipeline Stepper / Progress Tracker */}
       <PipelineProgressTracker
@@ -354,10 +443,18 @@ export default function ProjectStudioPage() {
 
           <VideoPlayer
             videoUrl={
-              activeVideoSource === 'burned' && project.burned_video_url ? project.burned_video_url :
-              activeVideoSource === 'dubbed' && project.dubbed_video_url ? project.dubbed_video_url :
-              activeVideoSource === 'original' && project.original_video_url ? project.original_video_url :
-              (project.dubbed_video_url || project.burned_video_url || project.original_video_url)
+              (() => {
+                const url = activeVideoSource === 'burned' && project.burned_video_url ? project.burned_video_url :
+                  activeVideoSource === 'dubbed' && project.dubbed_video_url ? project.dubbed_video_url :
+                  activeVideoSource === 'original' && project.original_video_url ? project.original_video_url :
+                  (project.dubbed_video_url || project.burned_video_url || project.original_video_url);
+                  
+                if (!url) return undefined;
+                if (url.includes('bilibili.com') || url.includes('b23.tv') || url.includes('youtube.com') || url.includes('youtu.be') || url.includes('douyin.com')) {
+                  return undefined;
+                }
+                return url;
+              })()
             }
             isBurnedVideo={
               activeVideoSource === 'burned' ||
@@ -367,47 +464,77 @@ export default function ProjectStudioPage() {
             currentTime={currentTime}
             onTimeUpdate={setCurrentTime}
             seekTime={seekTarget}
+            initialCleanMode={cleanChineseMode}
+            onCleanModeChange={setCleanChineseMode}
+            loadingPercentage={project.current_stage === 'DOWNLOADING_URL' ? project.progress_percentage : undefined}
+            loadingMessage={project.current_stage === 'DOWNLOADING_URL' ? 'Đang tải video gốc từ nguồn...' : undefined}
           />
 
-          {/* Dubbed Media Download & Status Box */}
-          {(project.dubbed_video_url || project.dubbed_audio_url) && (
-            <div className="bg-gradient-to-br from-indigo-50/80 to-violet-50/80 rounded-2xl p-4 border border-indigo-200/80 space-y-2.5 shadow-xs">
+          {/* Completed Media Download & Status Box */}
+          {(project.burned_video_url || project.dubbed_video_url || project.dubbed_audio_url) && (
+            <div className="bg-gradient-to-br from-emerald-50/90 via-teal-50/60 to-indigo-50/80 rounded-2xl p-4 border border-emerald-200/90 space-y-3 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span className="text-base">✨</span>
-                  <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                    Bản Lồng Tiếng AI ({getFriendlyVoiceName(project.default_voice)})
+                  <span className="text-lg">🎉</span>
+                  <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                    Sản Phẩm Đã Hoàn Thiện
                   </span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Hoàn tất
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">
+                  ✅ Sẵn sàng tải
                 </span>
               </div>
-              <p className="text-[11px] text-indigo-900/80 leading-relaxed">
-                Video và giọng lồng tiếng chất lượng cao đã sẵn sàng để tải về hoặc đăng tải.
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Video và giọng lồng tiếng chất lượng cao đã sẵn sàng để tải về hoặc đăng tải lên mạng xã hội.
               </p>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                {project.dubbed_video_url && (
+
+              <div className="space-y-2 pt-0.5">
+                {/* Burned Video - Highest Quality Master */}
+                {project.burned_video_url && (
                   <a
-                    href={project.dubbed_video_url}
+                    href={project.burned_video_url}
                     download
-                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-xs transition-colors"
+                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold flex items-center justify-between shadow-xs transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                   >
-                    <span>🎬 Video (.mp4)</span>
+                    <div className="flex items-center space-x-2">
+                      <Download className="w-4 h-4 text-emerald-100" />
+                      <span>🔥 Tải Video Đã Burn Sub (.mp4)</span>
+                    </div>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/20 text-emerald-50">
+                      Khuyên dùng
+                    </span>
                   </a>
                 )}
-                {project.dubbed_audio_url && (
-                  <a
-                    href={project.dubbed_audio_url}
-                    download
-                    className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-indigo-200 text-indigo-900 text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-2xs transition-colors"
-                  >
-                    <span>🎵 Âm thanh (.mp3)</span>
-                  </a>
-                )}
+
+                {/* Secondary Downloads Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  {project.dubbed_video_url && (
+                    <a
+                      href={project.dubbed_video_url}
+                      download
+                      className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                      title="Video chỉ ghép audio lồng tiếng AI"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-200" />
+                      <span>🎙️ Video Dub (.mp4)</span>
+                    </a>
+                  )}
+                  {project.dubbed_audio_url && (
+                    <a
+                      href={project.dubbed_audio_url}
+                      download
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
+                      title="File âm thanh giọng lồng tiếng"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                      <span>🎵 Audio (.mp3)</span>
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           )}
+
 
           {/* Real-time Project Pipeline Status */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2.5 shadow-sm">

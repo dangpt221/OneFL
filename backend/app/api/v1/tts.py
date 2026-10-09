@@ -20,7 +20,7 @@ router = APIRouter(prefix="/tts", tags=["TTS & AI Dubbing"])
 
 
 class TTSPreviewRequest(BaseModel):
-    voice: str = Field("nova", description="Voice ID (e.g. nova, shimmer, alloy, onyx)")
+    voice: str = Field("vi-VN-HoaiMyNeural", description="Voice ID (e.g. vi-VN-HoaiMyNeural, vieneu-thuy-dung, vieneu-ngoc-huyen)")
     speed: float = Field(1.0, ge=0.5, le=2.0)
     sample_text: Optional[str] = None
 
@@ -34,12 +34,13 @@ class TTSPreviewResponse(BaseModel):
 
 
 class ProjectDubRequest(BaseModel):
-    voice: str = Field("nova", description="Default project voice (default: nova for movie reviews)")
-    model: str = Field("tts-1", description="OpenAI TTS model: tts-1 or tts-1-hd")
+    voice: str = Field("vi-VN-HoaiMyNeural", description="Default project voice (e.g. vi-VN-HoaiMyNeural or vieneu-ngoc-huyen)")
+    model: str = Field("tts-1", description="TTS model")
     speed: float = Field(1.0, ge=0.5, le=2.0)
     ducking_volume: float = Field(0.18, ge=0.0, le=1.0, description="Background music volume in Review Phim mode")
     mix_original: bool = Field(True, description="True for Review Phim / Recap mode (keep 18% BGM), False for complete audio replacement")
     speaker_voice_map: Optional[Dict[str, str]] = None
+    use_speaker_matrix: bool = Field(False, description="Whether to use multi-speaker voices from Speaker Matrix instead of single selected voice")
 
 
 @router.get("/voices", response_model=List[Dict[str, Any]])
@@ -66,9 +67,10 @@ async def _run_dubbing_task(
     speed: float,
     ducking_volume: float,
     mix_original: bool,
-    speaker_voice_map: Dict[str, str]
+    speaker_voice_map: Optional[Dict[str, str]] = None,
+    use_speaker_matrix: bool = False
 ):
-    """Background task orchestrating full video dubbing."""
+    """Background task orchestrating full video dubbing with 100% voice precision guarantee."""
     async with get_async_session() as db:
         res = await db.execute(select(Project).where(Project.id == project_id))
         project = res.scalar_one_or_none()
@@ -104,9 +106,21 @@ async def _run_dubbing_task(
             if not cues:
                 raise ValueError("Project has no subtitle cues to dub.")
 
-            # If no custom speaker map provided, use the chosen single voice for all speakers
-            if not speaker_voice_map:
-                speaker_voice_map = {}
+            # Guaranteed 100% Voice Precision:
+            # If the user selected a voice in single-voice mode (use_speaker_matrix=False and no explicit speaker_voice_map),
+            # ALL cues must strictly use `voice`.
+            final_speaker_map = {}
+            if use_speaker_matrix and not speaker_voice_map:
+                spk_res = await db.execute(
+                    select(SpeakerProfile).where(SpeakerProfile.project_id == project_id)
+                )
+                db_speakers = spk_res.scalars().all()
+                for s in db_speakers:
+                    if s.speaker_tag and s.tts_voice:
+                        final_speaker_map[s.speaker_tag] = s.tts_voice
+            elif speaker_voice_map:
+                final_speaker_map = dict(speaker_voice_map)
+
 
             cues_data = [
                 {
@@ -114,7 +128,7 @@ async def _run_dubbing_task(
                     "start_time": c.start_time,
                     "end_time": c.end_time,
                     "original_text": c.original_text,
-                    "translated_text": c.translated_text or "",
+                    "translated_text": c.translated_text or c.original_text,
                     "speaker_tag": c.speaker_tag
                 }
                 for c in cues
@@ -156,9 +170,10 @@ async def _run_dubbing_task(
                 default_voice=voice,
                 model=model,
                 default_speed=speed,
-                speaker_voice_map=speaker_voice_map,
+                speaker_voice_map=final_speaker_map,
                 progress_callback=progress_cb
             )
+
 
             project.dubbed_audio_path = str(output_audio_path)
             project.dubbed_audio_url = storage_service.get_relative_url(output_audio_path)
@@ -244,8 +259,10 @@ async def start_project_dubbing(
         speed=data.speed,
         ducking_volume=data.ducking_volume,
         mix_original=data.mix_original,
-        speaker_voice_map=data.speaker_voice_map or {}
+        speaker_voice_map=data.speaker_voice_map or {},
+        use_speaker_matrix=data.use_speaker_matrix
     )
+
 
     return {
         "success": True,

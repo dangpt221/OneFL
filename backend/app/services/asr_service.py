@@ -145,16 +145,23 @@ class ASRService:
                     pass
 
                 # Offset segment times by chunk_start
+                last_speaker = "SPEAKER_00"
+                last_end = 0.0
+
                 for seg in seg_list:
                     txt = seg.text.strip()
                     if txt:
+                        if enable_diarization and (seg.start - last_end > 1.5):
+                            last_speaker = "SPEAKER_01" if last_speaker == "SPEAKER_00" else "SPEAKER_00"
+                            
                         cues.append({
                             "cue_index": len(cues) + 1,
                             "start_time": round(chunk_start + seg.start, 3),
                             "end_time": round(chunk_start + seg.end, 3),
                             "original_text": txt,
-                            "speaker_tag": "SPEAKER_00"
+                            "speaker_tag": last_speaker
                         })
+                        last_end = seg.end
 
                 pct = int(((chunk_idx + 1) / num_chunks) * 100)
                 msg = f"Đang nhận diện giọng nói: Đoạn {chunk_idx + 1}/{num_chunks} ({len(cues)} câu thoại)..."

@@ -125,11 +125,11 @@ class Settings(BaseSettings):
     BURN_OUTPUT_AUDIO_BITRATE: str = "192k"
 
     # 8. TTS Dubbing Engine
-    DEFAULT_TTS_VOICE: str = "nova"  # 🌸 OpenAI Nova (Recommended for Movie Reviews & Vlog)
+    DEFAULT_TTS_VOICE: str = "vi-VN-HoaiMyNeural"  # 🌸 Microsoft Hoài My Neural (Chuẩn tiếng Việt tự nhiên)
     DEFAULT_TTS_MODEL: str = "tts-1" # tts-1 | tts-1-hd
     DEFAULT_TTS_SPEED: float = 1.0
     DEFAULT_DUCKING_VOLUME: float = 0.18  # 18% background music volume
-    DEFAULT_TTS_PROVIDER: str = "openai"
+    DEFAULT_TTS_PROVIDER: str = "edge-tts"
 
     SUB_FONT_NAME: str = "Roboto"
     SUB_FONT_SIZE: int = 22

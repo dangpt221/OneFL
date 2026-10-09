@@ -192,8 +192,61 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "category": "OpenAI TTS",
         "description": "Giọng nam trầm ấm, dứt khoát, uy lực.",
         "sample_text": "Khi bóng tối bao trùm cả thành phố, cuộc chiến sinh tử cuối cùng mới thực sự bắt đầu."
+    },
+    {
+        "id": "alloy",
+        "provider": "openai",
+        "name": "🎙️ Alloy (Trung Tính - Cân Bằng & Hiện Đại)",
+        "gender": "neutral",
+        "accent": "Chuẩn mực",
+        "recommended": False,
+        "is_default": False,
+        "badge": "OpenAI Chuẩn",
+        "category": "OpenAI TTS",
+        "description": "Giọng đọc cân bằng, tự nhiên, nhả chữ rõ ràng cho phóng sự và bài giảng.",
+        "sample_text": "Hôm nay chúng ta sẽ phân tích toàn diện về các tiến bộ công nghệ mới nhất."
+    },
+    {
+        "id": "echo",
+        "provider": "openai",
+        "name": "📻 Echo (Nam - Trầm Ấm & Thuyết Minh)",
+        "gender": "male",
+        "accent": "Trầm ấm",
+        "recommended": False,
+        "is_default": False,
+        "badge": "Thuyết Minh",
+        "category": "OpenAI TTS",
+        "description": "Giọng nam ấm áp, tròn vành rõ chữ, phù hợp với phim tài liệu và tự sự.",
+        "sample_text": "Thời gian trôi qua, những câu chuyện lịch sử vẫn còn nguyên giá trị cho mai sau."
+    },
+    {
+        "id": "fable",
+        "provider": "openai",
+        "name": "🎭 Fable (Nam - Kịch Tính & Cổ Tích)",
+        "gender": "male",
+        "accent": "Kịch tính",
+        "recommended": False,
+        "is_default": False,
+        "badge": "Kể Chuyện",
+        "category": "OpenAI TTS",
+        "description": "Giọng nam biểu cảm kịch nghệ, tạo điểm nhấn sâu sắc cho kịch bản hư cấu.",
+        "sample_text": "Ngày xửa ngày xưa, ở một vương quốc xa xôi nơi ánh bình minh không bao giờ tắt."
+    },
+    {
+        "id": "shimmer",
+        "provider": "openai",
+        "name": "🌸 Shimmer (Nữ - Trong Sáng & Dịu Ngọt)",
+        "gender": "female",
+        "accent": "Trong trẻo",
+        "recommended": False,
+        "is_default": False,
+        "badge": "Nữ Dịu Dàng",
+        "category": "OpenAI TTS",
+        "description": "Giọng nữ trong trẻo, êm dịu, phù hợp cho podcast thư giãn và nội dung nhẹ nhàng.",
+        "sample_text": "Hãy cùng lắng đọng tâm hồn và tận hưởng những giai điệu êm đềm của buổi tối."
     }
 ]
+
 
 
 class TTSService:
@@ -224,7 +277,17 @@ class TTSService:
         for v in VOICE_CATALOG:
             if v["id"] == resolved_id:
                 return v
+        # Fallback matching by display name or partial keyword
+        v_lower = str(voice_id).lower()
+        for v in VOICE_CATALOG:
+            if v["name"].lower() == v_lower or v_lower in v["name"].lower() or v_lower in v["id"].lower():
+                return v
+        if "gtts" in v_lower:
+            for v in VOICE_CATALOG:
+                if v.get("provider") == "gtts":
+                    return v
         return VOICE_CATALOG[0]
+
 
     async def synthesize_speech(
         self,
@@ -381,48 +444,59 @@ class TTSService:
 
         profile = VOICE_PROFILES.get(voice_id)
         if not profile:
-            if voice_meta.get("gender") == "male" or voice_id in ["onyx"]:
+            if voice_meta.get("gender") == "male" or voice_id in ["onyx", "echo", "fable"]:
                 profile = VOICE_PROFILES["vi-VN-NamMinhNeural"]
             else:
                 profile = VOICE_PROFILES["vi-VN-HoaiMyNeural"]
+
 
         edge_voice = profile["edge_voice"]
         pitch_str = profile["pitch"]
         rate_adjust = profile["rate_adj"]
         eq_filter = profile.get("eq")
 
-        try:
-            import edge_tts
-            total_rate = int((speed - 1.0) * 100) + rate_adjust
-            rate_str = f"{total_rate:+d}%"
+        import edge_tts
+        total_rate = int((speed - 1.0) * 100) + rate_adjust
+        rate_str = f"{total_rate:+d}%"
 
-            if eq_filter:
-                temp_raw = output_path.parent / f"temp_{output_path.name}"
-                c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
-                await asyncio.wait_for(c.save(str(temp_raw)), timeout=15.0)
-                if temp_raw.exists() and temp_raw.stat().st_size > 500:
-                    ffmpeg_bin = settings.get_ffmpeg_bin()
-                    cmd = [
-                        ffmpeg_bin, "-y", "-i", str(temp_raw),
-                        "-af", eq_filter,
-                        "-c:a", "libmp3lame", "-b:a", "128k",
-                        str(output_path)
-                    ]
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    await proc.communicate()
-                    temp_raw.unlink(missing_ok=True)
-            else:
-                c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
-                await asyncio.wait_for(c.save(str(output_path)), timeout=15.0)
+        for attempt in range(3):
+            try:
+                if eq_filter:
+                    temp_raw = output_path.parent / f"temp_{output_path.name}"
+                    c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
+                    await asyncio.wait_for(c.save(str(temp_raw)), timeout=15.0)
+                    if temp_raw.exists() and temp_raw.stat().st_size > 500:
+                        ffmpeg_bin = settings.get_ffmpeg_bin()
+                        cmd = [
+                            ffmpeg_bin, "-y", "-i", str(temp_raw),
+                            "-af", eq_filter,
+                            "-c:a", "libmp3lame", "-b:a", "128k",
+                            str(output_path)
+                        ]
+                        proc = await asyncio.create_subprocess_exec(
+                            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                        )
+                        await proc.communicate()
+                        temp_raw.unlink(missing_ok=True)
+                else:
+                    c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
+                    await asyncio.wait_for(c.save(str(output_path)), timeout=15.0)
 
-            if output_path.exists() and output_path.stat().st_size > 500:
-                return output_path
-        except Exception as e:
-            logger.warning(f"Edge-TTS failed ({edge_voice}, pitch={pitch_str}): {e}. Falling back to gTTS.")
+                if output_path.exists() and output_path.stat().st_size > 500:
+                    return output_path
+            except Exception as e:
+                logger.warning(f"Edge-TTS failed attempt {attempt + 1}/3 ({edge_voice}, pitch={pitch_str}): {e}")
+                if attempt < 2:
+                    await asyncio.sleep(1.0)
+                else:
+                    logger.error(f"Edge-TTS completely failed after 3 attempts.")
 
         # 4. Robust Free Fallback with gTTS (Google Voice)
+        if provider != "gtts" and voice_id != "gtts-female-vi":
+            logger.error(f"TTS synthesis completely failed for voice {voice_id}. Generating silence to avoid voice mismatch.")
+            await self._create_empty_audio_clip(output_path, duration_seconds=1.0)
+            return output_path
+
         try:
             from gtts import gTTS
             loop = asyncio.get_running_loop()
@@ -618,23 +692,19 @@ class TTSService:
                     cue_voice = speaker_voice_map.get(speaker_tag, default_voice)
 
                     cue_idx = cue.get("cue_index", index + 1)
-                    clip_path = temp_clips_dir / f"clip_{index:04d}.mp3"
-                    alt_path = settings.TEMP_SCRATCH_DIR / "dub_full_ccf2249c" / f"clip_{cue_idx:04d}.mp3"
-                    alt_idx_path = settings.TEMP_SCRATCH_DIR / "dub_full_ccf2249c" / f"clip_{index:04d}.mp3"
+                    # Cache by content hash so whenever translated_text or voice changes, fresh speech is generated
+                    import hashlib
+                    text_hash = hashlib.md5(f"{cue_voice}_{default_speed}_{text}".encode("utf-8")).hexdigest()[:8]
+                    clip_path = temp_clips_dir / f"clip_{index:04d}_{text_hash}.mp3"
 
                     if not (clip_path.exists() and clip_path.stat().st_size > 500):
-                        if alt_path.exists() and alt_path.stat().st_size > 500:
-                            clip_path = alt_path
-                        elif alt_idx_path.exists() and alt_idx_path.stat().st_size > 500:
-                            clip_path = alt_idx_path
-                        else:
-                            await self.synthesize_speech(
-                                text=text,
-                                voice=cue_voice,
-                                model=model,
-                                speed=default_speed,
-                                output_path=clip_path
-                            )
+                        await self.synthesize_speech(
+                            text=text,
+                            voice=cue_voice,
+                            model=model,
+                            speed=default_speed,
+                            output_path=clip_path
+                        )
                     actual_duration = await self.get_audio_duration(clip_path)
 
                     effective_end = start_time + actual_duration
@@ -644,7 +714,7 @@ class TTSService:
                         # Only accelerate if it exceeds even the expanded silence gap
                         speed_factor = min(1.65, actual_duration / available_window)
                         tempo_filter = self.build_chained_atempo_filter(speed_factor)
-                        adjusted_clip = temp_clips_dir / f"clip_{index:04d}_tempo.mp3"
+                        adjusted_clip = temp_clips_dir / f"clip_{index:04d}_{text_hash}_tempo.mp3"
                         if not (adjusted_clip.exists() and adjusted_clip.stat().st_size > 500):
                             tempo_cmd = [
                                 ffmpeg_bin,
@@ -783,10 +853,10 @@ class TTSService:
             logger.error(f"Fast PCM timeline mixing error: {mix_err}", exc_info=True)
             await self._create_empty_audio_clip(output_audio_path, duration_seconds=max(1.0, total_duration))
 
-        # Only cleanup scratch clips if successfully created
-        if output_audio_path.exists() and output_audio_path.stat().st_size > 50000:
-            shutil.rmtree(temp_clips_dir, ignore_errors=True)
+        # Preserve clips in cache so incremental dubbing or edits don't re-synthesize untouched cues
+        # temp_clips_dir is keyed by output_audio_path.stem and voice
         return output_audio_path
+
 
     async def mix_dubbed_video(
         self,

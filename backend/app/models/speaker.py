@@ -24,7 +24,7 @@ class SpeakerProfile(Base):
     age_group = Column(String(50), default="adult")   # child, teen, young_adult, adult, senior
     role = Column(String(100), nullable=True)         # Director, Junior Dev, Friend, Host
     tone = Column(String(150), nullable=True)         # Polite, formal, casual, energetic
-    tts_voice = Column(String(50), default="nova")    # nova, shimmer, alloy, onyx, echo, vi-VN-HoaiMyNeural
+    tts_voice = Column(String(50), default="vi-VN-HoaiMyNeural")    # vi-VN-HoaiMyNeural, vi-VN-NamMinhNeural, vieneu-*, nova
     tts_speed = Column(Float, default=1.0)
     notes = Column(Text, nullable=True)
 

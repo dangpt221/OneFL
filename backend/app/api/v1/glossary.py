@@ -83,7 +83,7 @@ async def apply_glossary_preset(
 @router.get("/export")
 async def export_glossary(
     project_id: str,
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """Export project glossary terms as JSON or CSV."""
