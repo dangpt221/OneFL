@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Complete Voice Catalog with distinct female and male profiles and non-overlapping timbres
 VOICE_CATALOG: List[Dict[str, Any]] = [
-    # ── 1. GIỌNG NỮ ĐA DẠNG (KHÁC BIỆT 100% VỀ CAO ĐỘ, TIẾT TẤU & ÂM SẮC) ────
+    # ── 1. GIỌNG NỮ ĐA DẠNG (KHÁC BIỆT VỀ CAO ĐỘ, TIẾT TẤU & ÂM SẮC) ────
     {
         "id": "vi-VN-HoaiMyNeural",
         "provider": "edge-tts",
@@ -34,7 +34,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": True,
         "is_default": False,
         "badge": "⭐ Nữ Trẻ Trung",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Thùy Dung",
         "description": "Giọng nữ thanh thoát, cao và sáng hơn, nhịp điệu nhanh, hoạt bát. Rất thích hợp cho tóm tắt anime, review phim hài, vlog giải trí và video ngắn.",
         "sample_text": "Cơ mà các bạn có tin được không, nhân vật chính vừa bước chân vào đã bị cả bầy quái vật vây kín rồi!"
@@ -47,8 +47,8 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "accent": "Miền Bắc (Trầm đằm & Khàn nhẹ)",
         "recommended": True,
         "is_default": False,
-        "badge": "⭐ Trầm Đằm Chuẩn Vbee",
-        "category": "VieNeu Acoustic",
+        "badge": "⭐ Trầm Đằm Tùy chỉnh âm sắc",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Ngọc Linh",
         "description": "Giọng nữ miền Bắc tone trầm (-32Hz), chất giọng đằm, hơi khàn nhẹ và dày dặn. Nhịp đọc nhanh dứt khoát (1.12x), tăng dải trầm ấm 250Hz - 400Hz. Phong cách tương đương Ngọc Huyền Vbee, chuyên trị review truyện tu tiên, phim dài tập, nghe bền tai không chói.",
         "sample_text": "Lúc này tại thánh địa Vạn Cổ, Tiêu Viêm vừa mới bước chân vào đại điện đã cảm nhận được một luồng uy áp kinh hoàng từ phương xa ập tới."
@@ -62,7 +62,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": True,
         "is_default": False,
         "badge": "⭐ Giọng Quốc Dân Recap",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Ngọc Huyền",
         "description": "Tinh chỉnh âm học chuẩn phong cách Ngọc Huyền Vbee: Pitch -32Hz loại bỏ hoàn toàn âm the thé, nhịp đọc 1.12x dứt khoát, tăng cường dải trầm ấm 250Hz - 400Hz (+3.8dB). Giọng đọc số 1 cho review hoạt hình 3D, donghua và truyện dài tập.",
         "sample_text": "Lúc này tại thánh địa Vạn Cổ, Tiêu Viêm vừa mới bước chân vào đại điện đã cảm nhận được một luồng uy áp kinh hoàng từ phương xa ập tới."
@@ -76,7 +76,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": False,
         "is_default": False,
         "badge": "Nữ Ngọt Ngào",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Mỹ Duyên",
         "description": "Giọng nữ ngọt ngào, dịu dàng, âm hưởng du dương, nhả chữ mềm mại cho sách nói, podcast chữa lành và video văn hóa nghệ thuật.",
         "sample_text": "Cuộc đời mỗi con người giống như một chuyến tàu, có những ga dừng chân để lại bao nhiêu niềm thương nỗi nhớ."
@@ -90,7 +90,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": False,
         "is_default": False,
         "badge": "Nữ Thời Sự",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Mai Anh",
         "description": "Giọng nữ phát thanh viên đĩnh đạc, chuẩn xác từng câu chữ, âm sắc sáng rõ cho phóng sự, tin tức thời sự và thuyết minh tài liệu chuyên nghiệp.",
         "sample_text": "Bản tin tổng hợp hôm nay xin kính gửi tới quý vị và các bạn những thông tin nóng nhất vừa được cập nhật."
@@ -132,7 +132,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": True,
         "is_default": False,
         "badge": "⭐ Nam Trầm Vang",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Minh Quân Pro",
         "description": "Giọng nam baritone trầm vang uy lực, phong thái điện ảnh bom tấn. Lựa chọn số 1 cho review phim hành động, sci-fi và trailer kịch tính.",
         "sample_text": "Trong bóng đêm vô tận, vị anh hùng cuối cùng đã bước lên để đối mặt với số phận của toàn nhân loại."
@@ -146,7 +146,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": False,
         "is_default": False,
         "badge": "Nam Trẻ Trung",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Xuân Vĩnh",
         "description": "Giọng nam trẻ trung, vui nhộn, nhịp điệu nhanh và tự nhiên. Hoàn hảo cho tóm tắt anime, review hài hước và video mạng xã hội.",
         "sample_text": "Và thế là anh bạn của chúng ta đã có một pha xử lý đi vào lòng đất khiến cả khán phòng phải bật cười!"
@@ -160,7 +160,7 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
         "recommended": False,
         "is_default": False,
         "badge": "Nam Sâu Lắng",
-        "category": "VieNeu Acoustic",
+        "category": "Edge Neural · Cấu hình âm sắc",
         "vieneu_preset": "Thanh Bình",
         "description": "Giọng nam ấm áp, nhẹ nhàng, sâu lắng. Thích hợp cho radio đêm, podcast tâm sự và các câu chuyện triết lý nhân sinh.",
         "sample_text": "Có những buổi chiều muộn, khi nhìn dòng người hối hả ngược xuôi, ta bất chợt nhận ra giá trị của những điều bình dị."
@@ -247,7 +247,71 @@ VOICE_CATALOG: List[Dict[str, Any]] = [
     }
 ]
 
-
+# High-Fidelity Character Profiles (Acoustically tuned with noticeable pitch, cadence & EQ)
+VOICE_PROFILES: Dict[str, Dict[str, Any]] = {
+    # ── NỮ ──────────────────────────────────────────────────────────
+    "vi-VN-HoaiMyNeural": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "+0Hz",
+        "rate_adj": 0,
+        "eq": None
+    },
+    "vieneu-thuy-dung": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "+42Hz",
+        "rate_adj": 12,
+        "eq": "equalizer=f=3400:width_type=h:width=1200:g=3.5"
+    },
+    "vieneu-ngoc-linh": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "-32Hz",
+        "rate_adj": 12,
+        "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
+    },
+    "vieneu-ngoc-huyen": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "-32Hz",
+        "rate_adj": 12,
+        "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
+    },
+    "vieneu-my-duyen": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "+22Hz",
+        "rate_adj": -2,
+        "eq": "equalizer=f=2200:width_type=h:width=900:g=2.5"
+    },
+    "vieneu-mai-anh": {
+        "edge_voice": "vi-VN-HoaiMyNeural",
+        "pitch": "-15Hz",
+        "rate_adj": 4,
+        "eq": "equalizer=f=1200:width_type=h:width=700:g=2.5"
+    },
+    # ── NAM ─────────────────────────────────────────────────────────
+    "vi-VN-NamMinhNeural": {
+        "edge_voice": "vi-VN-NamMinhNeural",
+        "pitch": "+0Hz",
+        "rate_adj": 0,
+        "eq": None
+    },
+    "vieneu-minh-quan": {
+        "edge_voice": "vi-VN-NamMinhNeural",
+        "pitch": "-35Hz",
+        "rate_adj": -6,
+        "eq": "equalizer=f=160:width_type=h:width=80:g=4.0"
+    },
+    "vieneu-xuan-vinh": {
+        "edge_voice": "vi-VN-NamMinhNeural",
+        "pitch": "+28Hz",
+        "rate_adj": 10,
+        "eq": "equalizer=f=2600:width_type=h:width=900:g=2.5"
+    },
+    "vieneu-thanh-binh": {
+        "edge_voice": "vi-VN-NamMinhNeural",
+        "pitch": "-18Hz",
+        "rate_adj": -4,
+        "eq": "equalizer=f=400:width_type=h:width=200:g=3.0"
+    },
+}
 
 class TTSService:
     """Enterprise-grade TTS Dubbing Service supporting distinct neural voices, Edge, OpenAI, and Google fallback."""
@@ -256,7 +320,6 @@ class TTSService:
         self.preview_cache_dir = settings.OUTPUT_DIR / "previews"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._openai_disabled = False
-        self.vieneu_api_base = os.getenv("VIENEU_API_BASE", "http://127.0.0.1:8001/v1")
 
     def get_voices(self) -> List[Dict[str, Any]]:
         return VOICE_CATALOG
@@ -280,642 +343,266 @@ class TTSService:
         # Fallback matching by display name or partial keyword
         v_lower = str(voice_id).lower()
         for v in VOICE_CATALOG:
-            if v["name"].lower() == v_lower or v_lower in v["name"].lower() or v_lower in v["id"].lower():
+            if v["name"].lower() == v_lower:
                 return v
         if "gtts" in v_lower:
             for v in VOICE_CATALOG:
                 if v.get("provider") == "gtts":
                     return v
-        return VOICE_CATALOG[0]
+        raise ValueError(f"Unknown voice ID: {voice_id}")
 
 
     async def synthesize_speech(
-        self,
-        text: str,
-        voice: str = "vi-VN-HoaiMyNeural",
-        model: str = "tts-1",
-        speed: float = 1.0,
-        output_path: Optional[Path] = None
+        self, text: str, voice: str = "vi-VN-HoaiMyNeural", model: str = "tts-1",
+        speed: float = 1.0, output_path: Optional[Path] = None,
     ) -> Path:
-        """
-        Synthesizes text into speech MP3 using:
-        1. Native Google Voice (gTTS) if gtts-female-vi
-        2. OpenAI TTS (nova, onyx) if valid key configured
-        3. Authentically differentiated Edge-TTS profiles with tailored pitch (+42Hz / -36Hz), rate, and FFmpeg EQ
-        4. Robust gTTS as zero-failure free fallback
-        """
-        if not text or not text.strip():
-            text = "..."
-
-        if output_path is None:
-            output_path = settings.TEMP_SCRATCH_DIR / f"tts_{os.urandom(6).hex()}.mp3"
+        from app.services.media_process import run_media, probe_media
+        from app.services.asr_service import ASRService
+        if not text.strip() or len(text) > 10000 or not 0.5 <= speed <= 2.0:
+            raise ValueError('Speech requires nonempty text (max 10000 characters) and speed 0.5?2.0')
+        meta = self.get_voice_by_id(voice)
+        voice_id, provider = meta['id'], meta['provider']
+        output_path = output_path or settings.TEMP_SCRATCH_DIR / f'tts_{os.urandom(12).hex()}.mp3'
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        voice_meta = self.get_voice_by_id(voice)
-        provider = voice_meta.get("provider", "edge-tts")
-        voice_id = voice_meta.get("id", voice)
-
-        # 1. Native Google Voice Engine (100% independent vocal tract from Microsoft Hoai My)
-        if voice_id == "gtts-female-vi" or provider == "gtts":
-            try:
-                from gtts import gTTS
-                loop = asyncio.get_running_loop()
-
-                def run_gtts_native():
-                    tts = gTTS(text=text.strip(), lang="vi", slow=False)
-                    tts.save(str(output_path))
-
-                await loop.run_in_executor(None, run_gtts_native)
-
-                # Speed adjustment via FFmpeg if requested
-                if abs(speed - 1.0) > 0.05 and output_path.exists() and output_path.stat().st_size > 500:
-                    ffmpeg_bin = settings.get_ffmpeg_bin()
-                    sped_up_path = output_path.parent / f"speed_{output_path.name}"
-                    clamped_speed = max(0.5, min(2.0, speed))
-                    cmd = [
-                        ffmpeg_bin, "-y", "-i", str(output_path),
-                        "-filter:a", f"atempo={clamped_speed:.2f}",
-                        str(sped_up_path)
-                    ]
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    await proc.communicate()
-                    if sped_up_path.exists():
-                        shutil.move(sped_up_path, output_path)
-
-                if output_path.exists() and output_path.stat().st_size > 500:
-                    return output_path
-            except Exception as gtts_err:
-                logger.warning(f"Native gTTS generation failed: {gtts_err}. Falling through.")
-
-        # 2. Try OpenAI TTS if provider is openai and key is available
-        if provider == "openai" and not self._openai_disabled and settings.OPENAI_API_KEY and settings.OPENAI_API_KEY.strip() and not settings.OPENAI_API_KEY.startswith("sk-proj-placeholder"):
-            try:
+        temporary = output_path.with_name(f'.{os.urandom(6).hex()}.mp3')
+        try:
+            if provider == 'openai':
+                if not settings.OPENAI_API_KEY or 'DIEN_API_KEY' in settings.OPENAI_API_KEY:
+                    raise RuntimeError('OpenAI voice requires a configured API key')
                 from openai import AsyncOpenAI
-                client = AsyncOpenAI(
-                    api_key=settings.OPENAI_API_KEY,
-                    base_url=settings.OPENAI_API_BASE
-                )
-                clamped_speed = max(0.5, min(2.0, speed))
-                logger.info(f"Synthesizing OpenAI TTS: voice={voice_id}, speed={clamped_speed}")
-                response = await client.audio.speech.create(
-                    model=model,
-                    voice=voice_id,
-                    input=text.strip(),
-                    speed=clamped_speed
-                )
-                with open(output_path, "wb") as f:
-                    f.write(response.content)
-                return output_path
-            except Exception as e:
-                err_str = str(e)
-                if "401" in err_str or "invalid_api_key" in err_str or "Incorrect API key" in err_str:
-                    self._openai_disabled = True
-                    logger.warning("OpenAI TTS key invalid/unauthorized (401). Disabling OpenAI TTS and switching to Neural voices.")
-                else:
-                    logger.warning(f"OpenAI TTS synthesis failed ({e}). Attempting Edge-TTS fallback.")
-
-        # 3. High-Fidelity Character Profiles (Acoustically tuned with noticeable pitch, cadence & EQ)
-        VOICE_PROFILES: Dict[str, Dict[str, Any]] = {
-            # ── NỮ ──────────────────────────────────────────────────────────
-            "vi-VN-HoaiMyNeural": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "+0Hz",
-                "rate_adj": 0,
-                "eq": None
-            },
-            "vieneu-thuy-dung": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "+42Hz",
-                "rate_adj": 12,
-                "eq": "equalizer=f=3400:width_type=h:width=1200:g=3.5"
-            },
-            "vieneu-ngoc-linh": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "-32Hz",
-                "rate_adj": 12,
-                "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
-            },
-            "vieneu-ngoc-huyen": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "-32Hz",
-                "rate_adj": 12,
-                "eq": "equalizer=f=320:width_type=h:width=150:g=3.8"
-            },
-            "vieneu-my-duyen": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "+22Hz",
-                "rate_adj": -2,
-                "eq": "equalizer=f=2200:width_type=h:width=900:g=2.5"
-            },
-            "vieneu-mai-anh": {
-                "edge_voice": "vi-VN-HoaiMyNeural",
-                "pitch": "-15Hz",
-                "rate_adj": 4,
-                "eq": "equalizer=f=1200:width_type=h:width=700:g=2.5"
-            },
-            # ── NAM ─────────────────────────────────────────────────────────
-            "vi-VN-NamMinhNeural": {
-                "edge_voice": "vi-VN-NamMinhNeural",
-                "pitch": "+0Hz",
-                "rate_adj": 0,
-                "eq": None
-            },
-            "vieneu-minh-quan": {
-                "edge_voice": "vi-VN-NamMinhNeural",
-                "pitch": "-35Hz",
-                "rate_adj": -6,
-                "eq": "equalizer=f=160:width_type=h:width=80:g=4.0"
-            },
-            "vieneu-xuan-vinh": {
-                "edge_voice": "vi-VN-NamMinhNeural",
-                "pitch": "+28Hz",
-                "rate_adj": 10,
-                "eq": "equalizer=f=2600:width_type=h:width=900:g=2.5"
-            },
-            "vieneu-thanh-binh": {
-                "edge_voice": "vi-VN-NamMinhNeural",
-                "pitch": "-18Hz",
-                "rate_adj": -4,
-                "eq": "equalizer=f=400:width_type=h:width=200:g=3.0"
-            },
-        }
-
-        profile = VOICE_PROFILES.get(voice_id)
-        if not profile:
-            if voice_meta.get("gender") == "male" or voice_id in ["onyx", "echo", "fable"]:
-                profile = VOICE_PROFILES["vi-VN-NamMinhNeural"]
+                async with AsyncOpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_API_BASE, timeout=45) as client:
+                    response = await client.audio.speech.create(model=model, voice=voice_id, input=text.strip(), speed=speed)
+                    temporary.write_bytes(response.content)
+            elif provider == 'gtts':
+                from gtts import gTTS
+                await ASRService._blocking(lambda: gTTS(text=text.strip(), lang='vi', slow=False, timeout=20).save(str(temporary)))
             else:
-                profile = VOICE_PROFILES["vi-VN-HoaiMyNeural"]
-
-
-        edge_voice = profile["edge_voice"]
-        pitch_str = profile["pitch"]
-        rate_adjust = profile["rate_adj"]
-        eq_filter = profile.get("eq")
-
-        import edge_tts
-        total_rate = int((speed - 1.0) * 100) + rate_adjust
-        rate_str = f"{total_rate:+d}%"
-
-        for attempt in range(3):
-            try:
-                if eq_filter:
-                    temp_raw = output_path.parent / f"temp_{output_path.name}"
-                    c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
-                    await asyncio.wait_for(c.save(str(temp_raw)), timeout=15.0)
-                    if temp_raw.exists() and temp_raw.stat().st_size > 500:
-                        ffmpeg_bin = settings.get_ffmpeg_bin()
-                        cmd = [
-                            ffmpeg_bin, "-y", "-i", str(temp_raw),
-                            "-af", eq_filter,
-                            "-c:a", "libmp3lame", "-b:a", "128k",
-                            str(output_path)
-                        ]
-                        proc = await asyncio.create_subprocess_exec(
-                            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                        )
-                        await proc.communicate()
-                        temp_raw.unlink(missing_ok=True)
-                else:
-                    c = edge_tts.Communicate(text.strip(), voice=edge_voice, rate=rate_str, pitch=pitch_str)
-                    await asyncio.wait_for(c.save(str(output_path)), timeout=15.0)
-
-                if output_path.exists() and output_path.stat().st_size > 500:
-                    return output_path
-            except Exception as e:
-                logger.warning(f"Edge-TTS failed attempt {attempt + 1}/3 ({edge_voice}, pitch={pitch_str}): {e}")
-                if attempt < 2:
-                    await asyncio.sleep(1.0)
-                else:
-                    logger.error(f"Edge-TTS completely failed after 3 attempts.")
-
-        # 4. Robust Free Fallback with gTTS (Google Voice)
-        if provider != "gtts" and voice_id != "gtts-female-vi":
-            logger.error(f"TTS synthesis completely failed for voice {voice_id}. Generating silence to avoid voice mismatch.")
-            await self._create_empty_audio_clip(output_path, duration_seconds=1.0)
+                import edge_tts
+                profile = VOICE_PROFILES[voice_id]
+                rate = f"{int((speed - 1.) * 100) + profile['rate_adj']:+d}%"
+                last_error = None
+                for attempt in range(3):
+                    try:
+                        speech = edge_tts.Communicate(text.strip(), voice=profile['edge_voice'], rate=rate, pitch=profile['pitch'])
+                        await asyncio.wait_for(speech.save(str(temporary)), timeout=30)
+                        await probe_media(temporary, require_audio=True)
+                        last_error = None
+                        break
+                    except Exception as error:
+                        last_error = error
+                        logger.warning('TTS attempt %s failed for %s: %s', attempt + 1, voice_id, type(error).__name__)
+                        if attempt < 2:
+                            await asyncio.sleep(0.5 * (attempt + 1))
+                if last_error:
+                    raise RuntimeError(f'Speech generation failed for {voice_id}: {last_error}') from last_error
+            filters = []
+            if provider == 'gtts' and speed != 1.:
+                filters.append(self.build_chained_atempo_filter(speed))
+            profile = VOICE_PROFILES.get(voice_id, {})
+            if profile.get('eq'):
+                filters.append(profile['eq'])
+            if filters:
+                filtered = temporary.with_name(f'filtered_{temporary.name}')
+                try:
+                    await run_media([settings.get_ffmpeg_bin(), '-y', '-i', str(temporary), '-af', ','.join(filters), str(filtered)])
+                    filtered.replace(temporary)
+                finally:
+                    filtered.unlink(missing_ok=True)
+            await probe_media(temporary, require_audio=True)
+            temporary.replace(output_path)
             return output_path
+        finally:
+            temporary.unlink(missing_ok=True)
 
-        try:
-            from gtts import gTTS
-            loop = asyncio.get_running_loop()
-
-            def run_gtts():
-                tts = gTTS(text.strip(), lang="vi", slow=False)
-                tts.save(str(output_path))
-
-            await asyncio.wait_for(loop.run_in_executor(None, run_gtts), timeout=12.0)
-
-            # Apply speed adjustment if speed != 1.0 using FFmpeg
-            if abs(speed - 1.0) > 0.05 and output_path.exists():
-                ffmpeg_bin = settings.get_ffmpeg_bin()
-                sped_up_path = output_path.parent / f"speed_{output_path.name}"
-                clamped_speed = max(0.5, min(2.0, speed))
-                cmd = [
-                    ffmpeg_bin,
-                    "-y",
-                    "-i", str(output_path),
-                    "-filter:a", f"atempo={clamped_speed:.2f}",
-                    str(sped_up_path)
-                ]
-                proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                await proc.communicate()
-                if sped_up_path.exists():
-                    shutil.move(sped_up_path, output_path)
-
-            return output_path
-        except Exception as e:
-            logger.error(f"gTTS fallback error: {e}")
-            await self._create_empty_audio_clip(output_path, duration_seconds=1.0)
-            return output_path
-
-    async def _create_empty_audio_clip(self, output_path: Path, duration_seconds: float = 1.0):
-        """Generates silent audio segment using FFmpeg."""
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        ffmpeg_bin = settings.get_ffmpeg_bin()
-        cmd = [
-            ffmpeg_bin,
-            "-y",
-            "-f", "lavfi",
-            "-i", f"anullsrc=r=24000:cl=mono",
-            "-t", str(duration_seconds),
-            "-c:a", "libmp3lame",
-            "-b:a", "64k",
-            str(output_path)
-        ]
-        try:
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            await proc.communicate()
-        except Exception as e:
-            logger.warning(f"Failed to generate silent audio with ffmpeg: {e}")
-            with open(output_path, "wb") as f:
-                f.write(b"\x00" * 1024)
-
-    async def generate_preview(self, voice: str = "nova", speed: float = 1.0, custom_text: Optional[str] = None) -> Dict[str, Any]:
-        """Generates a cached preview audio for front-end instant playback."""
-        voice_meta = self.get_voice_by_id(voice)
-        text_to_speak = custom_text or voice_meta.get("sample_text", "Xin chào các bạn!")
-
-        safe_hash = abs(hash(text_to_speak)) % 100000
-        cache_filename = f"preview_v3_{voice}_{int(speed * 100)}_{safe_hash}.mp3"
-        cache_path = self.preview_cache_dir / cache_filename
-
-        if not cache_path.exists() or cache_path.stat().st_size == 0:
-            await self.synthesize_speech(
-                text=text_to_speak,
-                voice=voice,
-                speed=speed,
-                output_path=cache_path
-            )
-
+    async def generate_preview(self, voice: str = "vi-VN-HoaiMyNeural", speed: float = 1., custom_text: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
+        import hashlib
+        import json
+        from app.services.media_process import probe_media
         from app.services.storage_service import storage_service
-        relative_url = storage_service.get_relative_url(cache_path)
-        return {
-            "voice_id": voice,
-            "name": voice_meta["name"],
-            "speed": speed,
-            "preview_url": relative_url,
-            "sample_text": text_to_speak
-        }
+        meta = self.get_voice_by_id(voice)
+        text = custom_text or meta['sample_text']
+        model = model or settings.DEFAULT_TTS_MODEL
+        key = hashlib.sha256(json.dumps(['v5', meta['id'], model, speed, text], ensure_ascii=False).encode()).hexdigest()
+        from app.security import current_user
+        directory = settings.OUTPUT_DIR / 'previews' / current_user.get()
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f'{key}.mp3'
+        valid = False
+        if path.exists():
+            try:
+                await probe_media(path, require_audio=True)
+                valid = True
+            except RuntimeError:
+                logger.warning('Regenerating invalid preview %s', path.name)
+        if not valid:
+            await self.synthesize_speech(text, voice=voice, model=model, speed=speed, output_path=path)
+        return {'voice_id': meta['id'], 'name': meta['name'], 'speed': speed,
+                'preview_url': storage_service.get_relative_url(path), 'sample_text': text}
 
     async def get_audio_duration(self, audio_path: Path) -> float:
-        """Measures duration of an audio file using Mutagen (instant in-memory header lookup), with fallback."""
-        if not audio_path.exists() or audio_path.stat().st_size == 0:
-            return 0.0
-
-        # Fast in-memory header read via Mutagen (<0.1ms vs 35ms FFmpeg subprocess)
-        try:
-            from mutagen.mp3 import MP3
-            audio = MP3(str(audio_path))
-            if audio.info and audio.info.length > 0:
-                return float(audio.info.length)
-        except Exception:
-            pass
-
-        # Fallback estimation from MP3 size (assuming ~128kbps)
-        try:
-            size_bytes = audio_path.stat().st_size
-            est_seconds = max(0.5, (size_bytes * 8) / 128000)
-            return est_seconds
-        except Exception:
-            return 0.0
+        from app.services.media_process import probe_media
+        return await probe_media(audio_path, require_audio=True)
 
     @staticmethod
     def build_chained_atempo_filter(speed_factor: float) -> str:
-        """
-        Builds chained atempo filters to preserve voice pitch and prevent chipmunk / robotic distortion.
-        (Adapted from PyVideoTrans audio rate synchronization)
-        If speed_factor <= 1.25, a single atempo filter is used.
-        If speed_factor > 1.25, chains multiple atempo filters (each <= 1.25).
-        """
-        speed = max(0.5, min(2.5, speed_factor))
-        if speed <= 1.25:
-            return f"atempo={speed:.3f}"
-        
+        if not 0.5 <= speed_factor <= 2.5:
+            raise ValueError('Audio speed factor must be between 0.5 and 2.5')
         filters = []
-        current = speed
-        while current > 1.25:
-            step = 1.22
-            filters.append(f"atempo={step:.3f}")
-            current = current / step
-        if current > 1.01:
-            filters.append(f"atempo={current:.3f}")
-        return ",".join(filters) if filters else f"atempo={speed:.3f}"
+        while speed_factor > 1.25:
+            filters.append('atempo=1.220')
+            speed_factor /= 1.22
+        filters.append(f'atempo={speed_factor:.6f}')
+        return ','.join(filters)
 
     async def dub_project_timeline(
-        self,
-        cues_data: List[Dict[str, Any]],
-        total_duration: float,
-        output_audio_path: Path,
-        default_voice: str = "nova",
-        model: str = "tts-1",
-        default_speed: float = 1.0,
-        speaker_voice_map: Optional[Dict[str, str]] = None,
-        progress_callback = None
+        self, cues_data: List[Dict[str, Any]], total_duration: float, output_audio_path: Path,
+        default_voice: str = "vi-VN-HoaiMyNeural", model: str = "tts-1", default_speed: float = 1.,
+        speaker_voice_map: Optional[Dict[str, str]] = None, progress_callback=None,
+        speaker_speed_map: Optional[Dict[str, float]] = None,
     ) -> Path:
-        """
-        Synthesizes all subtitle cues and places them onto a synchronized audio timeline.
-        Features Silence Gap Expansion (from PyVideoTrans): Expands dialogue window into natural pauses,
-        dramatically reducing unnecessary speech acceleration so voices remain natural and clear.
-        Applies Chained atempo when acceleration is required to preserve pitch and avoid distortion.
-        """
+        import hashlib
+        import json
+        import math
+        import tempfile
+        from app.services.pcm_mixer import mix_pcm_blocks
+        from app.services.media_process import run_media, probe_media, validate_duration
+        from app.services.asr_service import ASRService
+        if not cues_data or not math.isfinite(total_duration) or total_duration <= 0:
+            raise ValueError('Dubbing requires subtitle cues and a valid media duration')
+        sorted_cues = sorted(cues_data, key=lambda c: c['start_time'])
         output_audio_path.parent.mkdir(parents=True, exist_ok=True)
-        speaker_voice_map = speaker_voice_map or {}
-
-        if not cues_data:
-            await self._create_empty_audio_clip(output_audio_path, duration_seconds=max(1.0, total_duration))
-            return output_audio_path
-
-        # Sort cues chronologically for reliable gap calculation
-        sorted_cues = sorted(cues_data, key=lambda c: float(c.get("start_time", 0.0)))
-        total_cues = len(sorted_cues)
-
-        temp_clips_dir = settings.TEMP_SCRATCH_DIR / f"clips_{output_audio_path.stem}_{default_voice}"
-        temp_clips_dir.mkdir(parents=True, exist_ok=True)
-        ffmpeg_bin = settings.get_ffmpeg_bin()
-
-        generated_clips = []
-        clips_lock = asyncio.Lock()
-        semaphore = asyncio.Semaphore(8)
-        completed_count = 0
-        counter_lock = asyncio.Lock()
-
-        async def process_single_cue(index: int, cue: Dict[str, Any]):
-            nonlocal completed_count
-            async with semaphore:
-                try:
-                    text = (cue.get("translated_text") or "").strip()
+        # Speech content cache is independent of job/output versions. The caller's
+        # project directory is the stable namespace; tempo includes timing.
+        namespace = hashlib.sha256(str(output_audio_path.parent.resolve()).encode()).hexdigest()[:24]
+        cache_dir = settings.TEMP_SCRATCH_DIR / 'speech' / namespace
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        workers = min(settings.TTS_MAX_CONCURRENCY, len(sorted_cues))
+        semaphore, progress_lock = asyncio.Semaphore(workers), asyncio.Lock()
+        measurements = [None] * len(sorted_cues)
+        overlaps = []
+        preceding_end = 0.
+        for index, cue in enumerate(sorted_cues):
+            overlaps.append(float(cue['start_time']) < preceding_end or (
+                index + 1 < len(sorted_cues) and float(sorted_cues[index + 1]['start_time']) < float(cue['end_time'])))
+            preceding_end = max(preceding_end, float(cue['end_time']))
+        done = 0
+        with tempfile.TemporaryDirectory(prefix='mix_', dir=settings.TEMP_SCRATCH_DIR) as scratch:
+            work = Path(scratch)
+            async def prepare(index, cue):
+                nonlocal done
+                async with semaphore:
+                    text = (cue.get('translated_text') or '').strip()
                     if not text:
-                        async with counter_lock:
-                            completed_count += 1
-                            curr_done = completed_count
+                        raise ValueError(f"Cue {cue.get('cue_index')} has no translation")
+                    start, end = float(cue['start_time']), float(cue['end_time'])
+                    if not math.isfinite(start + end) or start < 0 or end <= start or end > total_duration + 0.1:
+                        raise ValueError('Invalid dubbing cue timing')
+                    start_sample = int(round(start * 24000))
+                    window_samples = int(math.floor(min(end, total_duration) * 24000)) - start_sample
+                    if window_samples <= 0:
+                        raise ValueError('Dubbing cue is shorter than one audio sample')
+                    tag = cue.get('speaker_tag', 'SPEAKER_00')
+                    voice = (speaker_voice_map or {}).get(tag, default_voice)
+                    speed = (speaker_speed_map or {}).get(tag, default_speed)
+                    key = hashlib.sha256(json.dumps(['v4', voice, model, speed, text, VOICE_PROFILES.get(voice)], ensure_ascii=False).encode()).hexdigest()
+                    clip = cache_dir / f'{key}.mp3'
+                    from app.services.storage_service import storage_service
+                    lock_dir = cache_dir / 'locks' / key
+                    lock_dir.mkdir(parents=True, exist_ok=True)
+                    async with storage_service._upload_lock(lock_dir):
+                        if clip.exists():
+                            try:
+                                actual = await probe_media(clip, require_audio=True)
+                            except RuntimeError:
+                                clip.unlink(missing_ok=True)
+                        if not clip.exists():
+                            await self.synthesize_speech(text, voice, model, speed, clip)
+                    await probe_media(clip, require_audio=True)
+                    pcm = work / f'{index}.pcm'
+                    await run_media([settings.get_ffmpeg_bin(), '-y', '-i', str(clip), '-f', 's16le', '-ar', '24000', '-ac', '1', str(pcm)])
+                    if not pcm.is_file() or pcm.stat().st_size == 0:
+                        raise RuntimeError('Speech decoding produced no PCM')
+                    source_pcm = pcm
+                    source_samples = pcm.stat().st_size // 2
+                    fitted_samples, factor = source_samples, 1.
+                    # Container duration includes codec padding. Fit decoded samples,
+                    # and remeasure atempo output rather than cutting the last word.
+                    for attempt in range(3):
+                        if fitted_samples <= window_samples:
+                            break
+                        required = source_samples / window_samples
+                        if required > 2.5:
+                            break
+                        if attempt == 0:
+                            factor = required
+                        else:
+                            factor = min(2.5, factor * fitted_samples / window_samples * 1.01)
+                        pcm = work / f'{index}_fit_{attempt}.pcm'
+                        await run_media([settings.get_ffmpeg_bin(), '-y', '-f', 's16le', '-ar', '24000', '-ac', '1',
+                                         '-i', str(source_pcm), '-af', self.build_chained_atempo_filter(factor),
+                                         '-f', 's16le', str(pcm)])
+                        fitted_samples = pcm.stat().st_size // 2
+                    if fitted_samples <= 0 or fitted_samples > window_samples:
+                        raise RuntimeError(f'Cue {cue.get("cue_index")} cannot fit its timeline; shorten the translation or edit timing')
+                    measurements[index] = {
+                        'cue_index': cue.get('cue_index', index + 1), 'start_time': start, 'end_time': end,
+                        'source_duration': source_samples / 24000, 'fitted_duration': fitted_samples / 24000,
+                        'audio_end': (start_sample + fitted_samples) / 24000, 'speedup': factor,
+                        'overlaps': overlaps[index],
+                    }
+                    async with progress_lock:
+                        done += 1
                         if progress_callback:
-                            await progress_callback(curr_done, total_cues, False)
-                        return
-                    start_time = float(cue.get("start_time", 0.0))
-                    orig_end_time = float(cue.get("end_time", start_time + 2.0))
-                    orig_window = max(0.5, orig_end_time - start_time)
-
-                    # --- SILENCE GAP EXPANSION (PyVideoTrans) ---
-                    # Expand dialogue limit into silence pause before next subtitle starts
-                    if index < total_cues - 1:
-                        next_start = float(sorted_cues[index + 1].get("start_time", orig_end_time))
-                        # Leave a safe 80ms breathing pause before the next speaker speaks
-                        max_expanded_end = max(orig_end_time, next_start - 0.08)
-                    else:
-                        max_expanded_end = max(orig_end_time, total_duration)
-
-                    available_window = max(0.5, max_expanded_end - start_time)
-
-                    speaker_tag = cue.get("speaker_tag", "SPEAKER_00")
-                    cue_voice = speaker_voice_map.get(speaker_tag, default_voice)
-
-                    cue_idx = cue.get("cue_index", index + 1)
-                    # Cache by content hash so whenever translated_text or voice changes, fresh speech is generated
-                    import hashlib
-                    text_hash = hashlib.md5(f"{cue_voice}_{default_speed}_{text}".encode("utf-8")).hexdigest()[:8]
-                    clip_path = temp_clips_dir / f"clip_{index:04d}_{text_hash}.mp3"
-
-                    if not (clip_path.exists() and clip_path.stat().st_size > 500):
-                        await self.synthesize_speech(
-                            text=text,
-                            voice=cue_voice,
-                            model=model,
-                            speed=default_speed,
-                            output_path=clip_path
-                        )
-                    actual_duration = await self.get_audio_duration(clip_path)
-
-                    effective_end = start_time + actual_duration
-
-                    # If audio fits within the expanded window, no speed adjustment is needed!
-                    if actual_duration > available_window and actual_duration > 0.5:
-                        # Only accelerate if it exceeds even the expanded silence gap
-                        speed_factor = min(1.65, actual_duration / available_window)
-                        tempo_filter = self.build_chained_atempo_filter(speed_factor)
-                        adjusted_clip = temp_clips_dir / f"clip_{index:04d}_{text_hash}_tempo.mp3"
-                        if not (adjusted_clip.exists() and adjusted_clip.stat().st_size > 500):
-                            tempo_cmd = [
-                                ffmpeg_bin,
-                                "-y",
-                                "-i", str(clip_path),
-                                "-filter:a", tempo_filter,
-                                str(adjusted_clip)
-                            ]
-                            t_proc = await asyncio.create_subprocess_exec(
-                                *tempo_cmd,
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE
-                            )
-                            await t_proc.communicate()
-                        if adjusted_clip.exists() and adjusted_clip.stat().st_size > 500:
-                            clip_path = adjusted_clip
-                            effective_end = start_time + available_window
-
-                    async with clips_lock:
-                        generated_clips.append({
-                            "index": index,
-                            "start_time": start_time,
-                            "end_time": effective_end,
-                            "clip_path": clip_path
-                        })
-
-                    async with counter_lock:
-                        completed_count += 1
-                        curr_done = completed_count
-
-                    if progress_callback:
-                        await progress_callback(curr_done, total_cues, False)
-                except Exception as cue_err:
-                    logger.warning(f"Error processing dub cue #{index}: {cue_err}")
-                    async with counter_lock:
-                        completed_count += 1
-                        curr_done = completed_count
-                    if progress_callback:
-                        await progress_callback(curr_done, total_cues, False)
-
-        tasks = [process_single_cue(i, c) for i, c in enumerate(sorted_cues)]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        generated_clips.sort(key=lambda x: x["start_time"])
-
-        if not generated_clips:
-            await self._create_empty_audio_clip(output_audio_path, duration_seconds=max(1.0, total_duration))
-            return output_audio_path
-
-        # Construct full audio timeline using ultra-fast parallel PCM mixing (numpy + FFmpeg)
-        try:
-            import numpy as np
-            sample_rate = 24000
-            max_end = max([c["end_time"] for c in generated_clips] + [total_duration])
-            total_samples = int((max_end + 3.0) * sample_rate)
-            timeline = np.zeros(total_samples, dtype=np.int32)
-
-            decode_semaphore = asyncio.Semaphore(16)
-            pcm_results: List[Any] = [None] * len(generated_clips)
-            decoded_count = 0
-            dec_lock = asyncio.Lock()
-
-            async def decode_clip(idx: int, clip_info: Dict[str, Any]):
-                nonlocal decoded_count
-                async with decode_semaphore:
-                    c_path = str(clip_info["clip_path"])
-                    dec_cmd = [
-                        ffmpeg_bin, "-i", c_path,
-                        "-f", "s16le", "-ar", str(sample_rate), "-ac", "1", "-"
-                    ]
-                    try:
-                        d_proc = await asyncio.create_subprocess_exec(
-                            *dec_cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.DEVNULL
-                        )
-                        d_out, _ = await d_proc.communicate()
-                        if d_out:
-                            samples = np.frombuffer(d_out, dtype=np.int16)
-                            pcm_results[idx] = (float(clip_info["start_time"]), samples)
-                    except Exception as e:
-                        logger.warning(f"Error decoding clip #{idx}: {e}")
-
-                    async with dec_lock:
-                        decoded_count += 1
-                        curr_dec = decoded_count
-
-                    if progress_callback and (curr_dec % 50 == 0 or curr_dec == len(generated_clips)):
-                        await progress_callback(curr_dec, len(generated_clips), True)
-
-            decode_tasks = [decode_clip(i, clip) for i, clip in enumerate(generated_clips)]
-            await asyncio.gather(*decode_tasks, return_exceptions=True)
-
-            # Stamp decoded PCM buffers onto master timeline
-            for item in pcm_results:
-                if item is not None:
-                    c_start, samples = item
-                    start_idx = int(c_start * sample_rate)
-                    end_idx = min(len(timeline), start_idx + len(samples))
-                    timeline[start_idx:end_idx] += samples[:end_idx - start_idx]
-
-            # Normalize & clip audio samples to prevent distortion
-            timeline = np.clip(timeline, -32768, 32767).astype(np.int16)
-
-            # Write raw PCM timeline directly to temporary binary file to prevent Windows 1GB pipe buffer overflow/deadlock
-            raw_timeline_path = temp_clips_dir / "timeline_master.pcm"
-            loop = asyncio.get_running_loop()
-            def write_pcm():
-                with open(raw_timeline_path, "wb") as f:
-                    f.write(timeline.tobytes())
-            await loop.run_in_executor(None, write_pcm)
-
-            # Encode timeline to MP3 via ffmpeg reading from file
-            enc_cmd = [
-                ffmpeg_bin, "-y",
-                "-f", "s16le", "-ar", str(sample_rate), "-ac", "1",
-                "-i", str(raw_timeline_path),
-                "-c:a", "libmp3lame",
-                "-b:a", "192k",
-                str(output_audio_path)
-            ]
-            enc_proc = await asyncio.create_subprocess_exec(
-                *enc_cmd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE
-            )
-            _, enc_err = await enc_proc.communicate()
-            if enc_proc.returncode != 0:
-                raise RuntimeError(f"FFmpeg PCM timeline encoding failed: {enc_err.decode(errors='ignore')}")
-
-            raw_timeline_path.unlink(missing_ok=True)
-
-            if not (output_audio_path.exists() and output_audio_path.stat().st_size > 1000):
-                raise RuntimeError("Failed to encode final dubbed timeline MP3.")
-        except Exception as mix_err:
-            logger.error(f"Fast PCM timeline mixing error: {mix_err}", exc_info=True)
-            await self._create_empty_audio_clip(output_audio_path, duration_seconds=max(1.0, total_duration))
-
-        # Preserve clips in cache so incremental dubbing or edits don't re-synthesize untouched cues
-        # temp_clips_dir is keyed by output_audio_path.stem and voice
+                            await progress_callback(done, len(sorted_cues), False, text)
+                    return start_sample, pcm
+            pending_cues = iter(enumerate(sorted_cues))
+            clips = [None] * len(sorted_cues)
+            async def prepare_worker():
+                # Advance synchronously before awaiting: each worker owns one cue
+                # and long transcripts do not allocate one asyncio Task per cue.
+                for index, cue in pending_cues:
+                    clips[index] = await prepare(index, cue)
+            tasks = [asyncio.create_task(prepare_worker()) for _ in range(workers)]
+            try:
+                await asyncio.gather(*tasks)
+            except BaseException:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
+            if progress_callback:
+                await progress_callback(0, 1, True)
+            raw = work / 'timeline.pcm'
+            await ASRService._blocking(lambda: mix_pcm_blocks(clips, raw, int(round(total_duration * 24000))))
+            temporary = work / 'timeline.mp3'
+            await run_media([settings.get_ffmpeg_bin(), '-y', '-f', 's16le', '-ar', '24000', '-ac', '1', '-i', str(raw), '-c:a', 'libmp3lame', '-b:a', '192k', str(temporary)])
+            await validate_duration(temporary, total_duration, audio=True)
+            from app.schemas.tts import DubbingTimingReport
+            report = DubbingTimingReport(cue_count=len(measurements), overlap_cue_count=sum(overlaps),
+                                         max_speedup=max(item['speedup'] for item in measurements), cues=measurements)
+            report_file = work / 'timing.json'
+            report_file.write_text(report.model_dump_json(), encoding='utf-8')
+            report_file.replace(output_audio_path.with_suffix('.timing.json'))
+            temporary.replace(output_audio_path)
+            if progress_callback:
+                await progress_callback(1, 1, True)
         return output_audio_path
 
-
-    async def mix_dubbed_video(
-        self,
-        video_path: Path,
-        dubbed_audio_path: Path,
-        output_video_path: Path,
-        ducking_volume: float = 0.18,
-        mix_original: bool = True
-    ) -> Path:
-        """
-        Muxes dubbed voiceover audio with video.
-        In Review Phim / Recap Mode (mix_original=True):
-        Lowers original video sound to ducking_volume (e.g. 18%) as background music and mixes voiceover on top!
-        """
+    async def mix_dubbed_video(self, video_path: Path, dubbed_audio_path: Path, output_video_path: Path,
+                               ducking_volume: float = 0.18, mix_original: bool = True) -> Path:
+        from app.services.media_process import run_media, probe_media, validate_duration
+        duration = await probe_media(video_path, require_video=True)
+        await probe_media(dubbed_audio_path, require_audio=True)
         output_video_path.parent.mkdir(parents=True, exist_ok=True)
-        ffmpeg_bin = settings.get_ffmpeg_bin()
-
-        if not video_path.exists():
-            logger.error(f"Video file not found for mixing: {video_path}")
-            return output_video_path
-
+        command = [settings.get_ffmpeg_bin(), '-y', '-i', str(video_path), '-i', str(dubbed_audio_path)]
         if mix_original:
-            # Audio Ducking Filter: [0:a] is original video sound (ducked background), [1:a] is dubbed voice
-            filter_complex = f"[0:a]volume={ducking_volume:.2f}[bg];[1:a]volume=1.08[voice];[bg][voice]amix=inputs=2:duration=first:dropout_transition=2[aout]"
-            cmd = [
-                ffmpeg_bin,
-                "-y",
-                "-i", str(video_path),
-                "-i", str(dubbed_audio_path),
-                "-filter_complex", filter_complex,
-                "-map", "0:v",
-                "-map", "[aout]",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                str(output_video_path)
-            ]
+            await probe_media(video_path, require_audio=True)
+            command += ['-filter_complex', f'[0:a]volume={ducking_volume:.3f}[bg];[bg][1:a]amix=inputs=2:duration=first:normalize=0[aout]', '-map', '0:v:0', '-map', '[aout]']
         else:
-            # Replace audio completely
-            cmd = [
-                ffmpeg_bin,
-                "-y",
-                "-i", str(video_path),
-                "-i", str(dubbed_audio_path),
-                "-map", "0:v",
-                "-map", "1:a",
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                str(output_video_path)
-            ]
-
-        logger.info(f"Mixing dubbed audio into video: {' '.join(cmd)}")
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            logger.warning(f"FFmpeg audio mixing warning: {stderr.decode(errors='ignore')}")
-            shutil.copyfile(video_path, output_video_path)
-
+            command += ['-map', '0:v:0', '-map', '1:a:0', '-af', 'apad']
+        command += ['-t', str(duration), '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', str(output_video_path)]
+        await run_media(command)
+        await validate_duration(output_video_path, duration, video=True, audio=True)
         return output_video_path
 
 

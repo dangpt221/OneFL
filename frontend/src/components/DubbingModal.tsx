@@ -1,5 +1,6 @@
 'use client';
 
+import { isProjectBusy } from '@/lib/projectView';
 import { api } from '@/lib/api';
 import { Project, TTSVoice } from '@/lib/types';
 import { useEffect, useRef, useState } from 'react';
@@ -15,6 +16,7 @@ interface DubbingModalProps {
 export default function DubbingModal({ project, isOpen, onClose, onDubbingStarted, cuesCount }: DubbingModalProps) {
   const [voices, setVoices] = useState<TTSVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<string>(project.default_voice || 'vi-VN-HoaiMyNeural');
+  const [useSpeakerMatrix, setUseSpeakerMatrix] = useState(false);
   const [model, setModel] = useState<string>('tts-1');
   const [speed, setSpeed] = useState<number>(1.0);
   const [mixOriginal, setMixOriginal] = useState<boolean>(true);
@@ -26,15 +28,24 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const previewRequest = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      const saved = project.last_dub_config || {};
+      setSelectedVoice(saved.voice || project.default_voice || 'vi-VN-HoaiMyNeural');
+      setModel(saved.model || 'tts-1'); setSpeed(saved.speed ?? 1);
+      setMixOriginal(saved.mix_original ?? true); setDuckingVolume(saved.ducking_volume ?? .18);
+      setUseSpeakerMatrix(saved.use_speaker_matrix ?? false);
+      setErrorMsg(null);
       loadVoices();
     } else {
+      previewRequest.current++;
+      setPreviewLoading(false);
       stopAudio();
     }
-  }, [isOpen]);
+  }, [isOpen, project.id]);
 
   const loadVoices = async () => {
     try {
@@ -44,7 +55,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
         setSelectedVoice(data[0].id);
       }
     } catch (err) {
-      console.error('Failed to load voices:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Không tải được danh sách giọng');
     }
   };
 
@@ -65,14 +76,16 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
       }
 
       setPreviewLoading(true);
-      const res = await api.previewTTSVoice(voiceId, speed);
+      const request = ++previewRequest.current;
+      const res = await api.previewTTSVoice(voiceId, speed, undefined, model);
+      if (request !== previewRequest.current) return;
       setPreviewLoading(false);
 
       if (res && res.preview_url) {
         setCurrentAudioUrl(res.preview_url);
         if (audioRef.current) {
           audioRef.current.src = res.preview_url;
-          audioRef.current.play();
+          await audioRef.current.play();
           setIsPlayingPreview(true);
         }
       }
@@ -93,6 +106,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
         model: model,
         speed: speed,
         ducking_volume: duckingVolume,
+        use_speaker_matrix: useSpeakerMatrix,
         mix_original: mixOriginal
       });
 
@@ -110,7 +124,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
   const currentVoiceObj = voices.find(v => v.id === selectedVoice) || voices[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+    <div role="dialog" aria-modal="true" aria-label="Lồng tiếng" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
       {/* Hidden audio element for previews */}
       <audio
         ref={audioRef}
@@ -131,6 +145,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
             </div>
           </div>
           <button
+            aria-label="Đóng"
             onClick={() => { stopAudio(); onClose(); }}
             className="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
           >
@@ -154,6 +169,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
             </div>
           )}
 
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={useSpeakerMatrix} onChange={event => setUseSpeakerMatrix(event.target.checked)} />Dùng giọng và tốc độ từ ma trận nhân vật</label>
           {/* Voice Selection Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -360,7 +376,8 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
           <div className="flex items-center space-x-3">
             <button
               type="button"
-              onClick={() => { stopAudio(); onClose(); }}
+              aria-label="Đóng"
+            onClick={() => { stopAudio(); onClose(); }}
               className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
             >
               Hủy bỏ
@@ -368,7 +385,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
             <button
               type="button"
               onClick={handleStartDubbing}
-              disabled={isSubmitting || ((cuesCount !== undefined ? cuesCount : (project.cue_count || 0)) === 0)}
+              disabled={isProjectBusy(project) || !voices.length || isSubmitting || ((cuesCount !== undefined ? cuesCount : (project.cue_count || 0)) === 0)}
               className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-600/30 flex items-center space-x-2 transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
             >
               {isSubmitting ? (

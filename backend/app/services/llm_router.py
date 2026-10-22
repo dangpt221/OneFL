@@ -4,6 +4,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 import httpx
 from app.config import settings
+from app.services.resource_limits import bounded_resource
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class LLMRouter:
         """Dispatches request to active provider with auto-fallback."""
         target_provider = (provider_override or self.primary_provider).lower()
         temp = temperature if temperature is not None else settings.LLM_TEMPERATURE
+        if target_provider not in {'gemini', 'openai'}:
+            raise ValueError(f'Unsupported translation provider: {target_provider}')
 
         try:
             if target_provider == "gemini":
@@ -39,7 +42,7 @@ class LLMRouter:
         except Exception as primary_error:
             logger.warning(f"Primary provider [{target_provider}] failed: {primary_error}")
             
-            if not settings.ENABLE_AUTO_FALLBACK_ON_ERROR:
+            if not settings.ENABLE_AUTO_FALLBACK_ON_ERROR or model_override:
                 raise primary_error
 
             backup_provider = self.fallback_provider if target_provider != self.fallback_provider else "openai"
@@ -56,6 +59,7 @@ class LLMRouter:
                 logger.error(f"Fallback provider [{backup_provider}] also failed: {fallback_error}")
                 raise RuntimeError(f"All LLM providers failed. Primary: {primary_error} | Fallback: {fallback_error}")
 
+    @bounded_resource('llm-gemini', lambda: settings.GEMINI_MAX_CONCURRENCY)
     async def _call_gemini(
         self,
         system_prompt: str,
@@ -68,97 +72,39 @@ class LLMRouter:
         if not api_key or "DIEN_API_KEY" in api_key:
             raise ValueError("GEMINI_API_KEY is not configured or placeholder detected.")
 
-        primary_model = model or settings.GEMINI_MODEL
-        # Models to try in order of priority (prioritizing models with fresh quota)
-        candidate_models = [primary_model, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"]
-        # De-duplicate while preserving order
-        candidate_models = list(dict.fromkeys(candidate_models))
-
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
+        target_model = model or settings.GEMINI_MODEL
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent'
+        headers = {'Content-Type': 'application/json', 'x-goog-api-key': api_key}
+        payload = {
+            'contents': [{'role': 'user', 'parts': [{'text': system_prompt + '\n\n' + user_prompt}]}],
+            'generationConfig': {'temperature': temperature, 'responseMimeType': 'application/json'},
         }
+        # Let the configured model choose its supported thinking defaults.
+        # A blanket thinkingBudget=0 is not a portable contract across models.
+        for attempt in range(4):
+            async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
+                response = await client.post(url, json=payload, headers=headers)
+            if response.status_code == 200:
+                candidates = response.json().get('candidates', [])
+                parts = candidates[0].get('content', {}).get('parts', []) if candidates else []
+                content = ''.join(part.get('text', '') for part in parts if not part.get('thought'))
+                if not content.strip():
+                    raise RuntimeError('Gemini returned no usable translation content')
+                return content
+            if response.status_code not in (429, 503) or attempt == 3:
+                raise RuntimeError(f'Gemini API error {response.status_code}: {response.text[:300]}')
+            wait = 4.0 * (attempt + 1)
+            try:
+                for detail in response.json().get('error', {}).get('details', []):
+                    if str(detail.get('retryDelay', '')).endswith('s'):
+                        wait = max(wait, float(detail['retryDelay'][:-1]) + 1)
+            except (ValueError, TypeError, AttributeError):
+                logger.debug('Provider supplied no usable retry delay; using bounded backoff')
+            logger.warning('Gemini request returned %s; retry %s/3', response.status_code, attempt + 1)
+            await asyncio.sleep(min(wait, 15.0))
+        raise RuntimeError('Gemini retry budget exhausted')
 
-        last_error = None
-        for m in candidate_models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
-            gen_config = {
-                "temperature": temperature,
-                "responseMimeType": "application/json"
-            }
-            if "2.5" in m or "3.6" in m:
-                gen_config["thinkingConfig"] = {"thinkingBudget": 0}
-
-            payload = {
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": f"{system_prompt}\n\n---\n\n{user_prompt}"}]
-                    }
-                ],
-                "generationConfig": gen_config
-            }
-
-            for attempt in range(4):
-                try:
-                    async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
-                        resp = await client.post(url, json=payload, headers=headers)
-                        
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                                if text_content:
-                                    return text_content
-                            raise RuntimeError(f"No valid candidates returned by Gemini ({m})")
-
-                        if resp.status_code == 503:
-                            if attempt < 3:
-                                logger.warning(f"Gemini model [{m}] temporarily busy (503). Waiting 3s before retry (attempt {attempt+1}/4)...")
-                                await asyncio.sleep(3.0)
-                                continue
-                            else:
-                                logger.warning(f"Gemini model [{m}] repeated 503. Switching to next model...")
-                                break
-
-                        if resp.status_code == 429:
-                            resp_text = resp.text
-                            # Check if daily quota is exhausted - only if PerDay is explicitly mentioned
-                            if "GenerateRequestsPerDay" in resp_text or "PerDay" in resp_text or "per_day" in resp_text:
-                                logger.warning(f"Gemini model [{m}] daily quota exhausted. Switching to next model...")
-                                break
-                            
-                            # Otherwise temporary RPM limit: wait and retry
-                            wait_sec = 4.0 * (attempt + 1)
-                            try:
-                                err_json = resp.json()
-                                for d in err_json.get("error", {}).get("details", []):
-                                    if "retryDelay" in d:
-                                        d_str = d["retryDelay"]
-                                        if d_str.endswith("s"):
-                                            wait_sec = max(wait_sec, float(d_str.rstrip("s")) + 1.0)
-                            except Exception:
-                                pass
-                            if attempt < 3:
-                                logger.warning(f"Gemini ({m}) 429 rate limit. Waiting {wait_sec:.1f}s (attempt {attempt + 1}/4)...")
-                                await asyncio.sleep(min(wait_sec, 15.0))
-                                continue
-                            else:
-                                break
-
-                        if resp.status_code == 404:
-                            logger.warning(f"Gemini model [{m}] returned 404. Trying next model...")
-                            break
-
-                        raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:300]}")
-                except Exception as e:
-                    last_error = e
-                    if attempt >= 3 or "Switching to next model" in str(e):
-                        break
-
-        raise RuntimeError(f"All Gemini candidate models failed. Last error: {last_error}")
-
+    @bounded_resource('llm-openai', lambda: settings.OPENAI_MAX_CONCURRENCY)
     async def _call_openai(
         self,
         system_prompt: str,
@@ -207,22 +153,21 @@ class LLMRouter:
         test_sys = "You are a translator. Return JSON: {\"status\": \"ok\", \"model\": \"name\"}"
         test_usr = "Hello world"
         
-        old_gemini = self.gemini_key
-        old_openai = self.openai_key
+        # Per-request router prevents concurrent key tests or translations from
+        # observing another request's credentials.
+        isolated = LLMRouter()
         try:
-            if provider == "gemini":
-                if api_key: self.gemini_key = api_key
-                res = await self._call_gemini(test_sys, test_usr, model=model, temperature=0.1)
+            if provider == 'gemini':
+                isolated.gemini_key = api_key or self.gemini_key
+                res = await isolated._call_gemini(test_sys, test_usr, model=model, temperature=0.1)
+            elif provider == 'openai':
+                isolated.openai_key = api_key or self.openai_key
+                res = await isolated._call_openai(test_sys, test_usr, model=model, temperature=0.1)
             else:
-                if api_key: self.openai_key = api_key
-                res = await self._call_openai(test_sys, test_usr, model=model, temperature=0.1)
-            
-            return {"success": True, "provider": provider, "raw_response": res}
-        except Exception as e:
-            return {"success": False, "provider": provider, "error": str(e)}
-        finally:
-            self.gemini_key = old_gemini
-            self.openai_key = old_openai
+                raise ValueError('Unsupported provider')
+            return {'success': True, 'provider': provider, 'raw_response': res}
+        except Exception as error:
+            return {'success': False, 'provider': provider, 'error': type(error).__name__ + ': connection test failed'}
 
 
 llm_router = LLMRouter()

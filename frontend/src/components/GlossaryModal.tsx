@@ -1,4 +1,5 @@
 'use client';
+import toast from 'react-hot-toast';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react';
 import { GlossaryTerm, GenrePresetSummary } from '@/lib/types';
 import { api } from '@/lib/api';
+import { parseCsv } from '@/lib/csv';
 
 interface GlossaryModalProps {
   isOpen: boolean;
@@ -60,7 +62,6 @@ export default function GlossaryModal({
     }
   }, [isOpen, projectId]);
 
-  if (!isOpen) return null;
 
   // Filtered terms
   const filteredTerms = terms.filter((term) => {
@@ -82,6 +83,8 @@ export default function GlossaryModal({
     return counts;
   }, [terms]);
 
+  if (!isOpen) return null;
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourceTerm.trim() || !targetTerm.trim()) return;
@@ -99,7 +102,7 @@ export default function GlossaryModal({
       setContextNote('');
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     } finally {
       setIsAdding(false);
     }
@@ -110,7 +113,7 @@ export default function GlossaryModal({
       await api.deleteGlossaryTerm(projectId, id);
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -121,7 +124,7 @@ export default function GlossaryModal({
       setEditingData({});
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -131,7 +134,7 @@ export default function GlossaryModal({
       await api.autoExtractGlossary(projectId);
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     } finally {
       setIsExtracting(false);
     }
@@ -144,7 +147,7 @@ export default function GlossaryModal({
       setShowPresetMenu(false);
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     } finally {
       setIsApplyingPreset(false);
     }
@@ -162,9 +165,9 @@ export default function GlossaryModal({
         const parsed = JSON.parse(text);
         termsToImport = parsed.terms || parsed;
       } else if (file.name.endsWith('.csv')) {
-        const lines = text.split('\n');
+        const lines = parseCsv(text);
         for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(',');
+          const parts = lines[i];
           if (parts.length >= 2 && parts[0].trim()) {
             termsToImport.push({
               source_term: parts[0].trim(),
@@ -176,22 +179,23 @@ export default function GlossaryModal({
         }
       }
 
+      if (termsToImport.length === 0) throw new Error('File không có thuật ngữ hợp lệ');
       if (termsToImport.length > 0) {
         await api.importGlossary(projectId, termsToImport, false);
         onUpdated();
       }
     } catch (err) {
-      console.error('Failed to parse import file:', err);
+      toast.error(err instanceof Error ? err.message : 'Không đọc được file thuật ngữ');
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <div role="dialog" aria-modal="true" aria-label="Thuật ngữ" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-white w-full max-w-4xl rounded-3xl p-6 relative border border-slate-200 shadow-2xl max-h-[92vh] flex flex-col">
         {/* Close Button */}
-        <button
+        <button aria-label="Đóng"
           onClick={onClose}
           className="absolute right-5 top-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >

@@ -1,13 +1,15 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Shield, Film, EyeOff, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
+import { indexAllSubtitleTimeline } from '@/lib/subtitleTimeline';
 import { SubtitleCue } from '@/lib/types';
 
 export type CleanChineseMode = 'cinema_bars' | 'bottom_bar' | 'smart_blur' | 'none';
 
 interface VideoPlayerProps {
   videoUrl?: string;
+  dubbedAudioUrl?: string;
   cues: SubtitleCue[];
   currentTime: number;
   onTimeUpdate: (time: number) => void;
@@ -21,6 +23,7 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({
   videoUrl,
+  dubbedAudioUrl,
   cues,
   currentTime,
   onTimeUpdate,
@@ -32,6 +35,8 @@ export default function VideoPlayer({
   loadingMessage,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playbackError, setPlaybackError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -43,6 +48,17 @@ export default function VideoPlayer({
   const [isCleanMenuOpen, setIsCleanMenuOpen] = useState(false);
   const [topMaskPct, setTopMaskPct] = useState(11);
   const [bottomMaskPct, setBottomMaskPct] = useState(16);
+  const [subtitleColor, setSubtitleColor] = useState<'white' | 'yellow' | 'cyan'>('white');
+
+  const getSubtitleColorClass = () => {
+    if (subtitleColor === 'white') {
+      return 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]';
+    }
+    if (subtitleColor === 'yellow') {
+      return 'text-yellow-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]';
+    }
+    return 'text-cyan-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]';
+  };
 
   useEffect(() => {
     if (initialCleanMode) {
@@ -63,54 +79,53 @@ export default function VideoPlayer({
     }
   }, [seekTime]);
 
-  // Find active subtitle cue at current time using Binary Search (O(log N))
+  const activeCueAt = useMemo(() => indexAllSubtitleTimeline(cues), [cues]);
   useEffect(() => {
-    if (!cues || cues.length === 0) {
-      setActiveSubtitle(null);
-      return;
-    }
+    const active = activeCueAt(currentTime);
+    setActiveSubtitle(active.length ? active.map(cue => cue.translated_text || cue.original_text).join('\n') : null);
+  }, [currentTime, activeCueAt]);
 
-    let left = 0;
-    let right = cues.length - 1;
-    let found = null;
-
-    while (left <= right) {
-      const mid = Math.floor((left + right) / 2);
-      const cue = cues[mid];
-
-      if (currentTime >= cue.start_time && currentTime <= cue.end_time) {
-        found = cue;
-        break;
+  // Synchronize audio playback with video time
+  useEffect(() => {
+    if (audioRef.current && videoRef.current) {
+      if (Math.abs(audioRef.current.currentTime - videoRef.current.currentTime) > 0.3) {
+        audioRef.current.currentTime = videoRef.current.currentTime;
       }
+    }
+  }, [currentTime]);
 
-      if (currentTime < cue.start_time) {
-        right = mid - 1;
+  // Auto-duck video original audio when dubbedAudioUrl is playing
+  useEffect(() => {
+    if (videoRef.current) {
+      if (dubbedAudioUrl) {
+        videoRef.current.volume = 0.18; // Duck original Chinese audio to background
       } else {
-        left = mid + 1;
+        videoRef.current.volume = 1.0;
       }
     }
-
-    if (found) {
-      setActiveSubtitle(found.translated_text || found.original_text);
-    } else {
-      setActiveSubtitle(null);
-    }
-  }, [currentTime, cues]);
+  }, [dubbedAudioUrl]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      videoRef.current.play();
-      setIsPlaying(true);
+      setPlaybackError('');
+      videoRef.current.play().catch(error => {
+        setIsPlaying(false);
+        setPlaybackError(error instanceof Error ? error.message : 'Không phát được video');
+      });
     }
   };
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       onTimeUpdate(videoRef.current.currentTime);
+      if (audioRef.current && Math.abs(audioRef.current.currentTime - videoRef.current.currentTime) > 0.4) {
+        audioRef.current.currentTime = videoRef.current.currentTime;
+      }
     }
   };
 
@@ -126,6 +141,9 @@ export default function VideoPlayer({
       videoRef.current.currentTime = target;
       onTimeUpdate(target);
     }
+    if (audioRef.current) {
+      audioRef.current.currentTime = target;
+    }
   };
 
   const cyclePlaybackRate = () => {
@@ -135,6 +153,9 @@ export default function VideoPlayer({
     setPlaybackRate(nextRate);
     if (videoRef.current) {
       videoRef.current.playbackRate = nextRate;
+    }
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate;
     }
   };
 
@@ -154,19 +175,41 @@ export default function VideoPlayer({
 
   return (
     <div className="bg-white rounded-3xl p-4 flex flex-col justify-between border border-slate-200 shadow-sm relative overflow-hidden group">
+      {playbackError && <p role="alert" className="mb-2 text-sm text-red-700">{playbackError}</p>}
       {/* Video Viewport */}
       <div className="relative aspect-video w-full rounded-2xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-inner select-none">
         {videoUrl ? (
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            className="w-full h-full object-contain"
-            muted={isMuted}
-          />
+          <>
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              onTimeUpdate={handleTimeUpdate}
+              onError={() => { setIsPlaying(false); setPlaybackError('Không tải được video. Kiểm tra kết nối hoặc làm mới dữ liệu dự án.'); }}
+              onEnded={() => { setIsPlaying(false); audioRef.current?.pause(); }}
+              onLoadedMetadata={handleLoadedMetadata}
+              onPlay={() => {
+                setIsPlaying(true);
+                if (audioRef.current && dubbedAudioUrl) {
+                  audioRef.current.currentTime = videoRef.current?.currentTime || 0;
+                  audioRef.current.play().catch(() => { videoRef.current?.pause(); setPlaybackError('Không phát được âm thanh lồng tiếng'); });
+                }
+              }}
+              onPause={() => {
+                setIsPlaying(false);
+                if (audioRef.current) audioRef.current.pause();
+              }}
+              className="w-full h-full object-contain"
+              muted={isMuted}
+            />
+            {dubbedAudioUrl && (
+              <audio
+                ref={audioRef}
+                src={dubbedAudioUrl}
+                preload="auto"
+                muted={isMuted}
+              />
+            )}
+          </>
         ) : loadingPercentage !== undefined ? (
           <div className="text-center p-6 flex flex-col items-center justify-center w-full max-w-sm">
             <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
@@ -211,7 +254,7 @@ export default function VideoPlayer({
                 {activeSubtitle.split('\n').map((line, idx) => (
                   <div
                     key={idx}
-                    className="text-yellow-300 font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+                    className={`font-bold tracking-wide transition-colors ${getSubtitleColorClass()}`}
                   >
                     {line}
                   </div>
@@ -226,7 +269,7 @@ export default function VideoPlayer({
           <div className="absolute bottom-6 left-0 right-0 px-6 text-center pointer-events-none transition-all animate-fade-in z-10">
             <div className="inline-block bg-black/80 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-white font-medium text-sm sm:text-base leading-snug max-w-[90%] shadow-2xl">
               {activeSubtitle.split('\n').map((line, idx) => (
-                <div key={idx} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] text-yellow-300 font-semibold">
+                <div key={idx} className={`font-bold tracking-wide transition-colors ${getSubtitleColorClass()}`}>
                   {line}
                 </div>
               ))}
@@ -257,6 +300,7 @@ export default function VideoPlayer({
           <div className="flex items-center gap-2">
             <button
               onClick={togglePlay}
+              aria-label={isPlaying ? 'Tạm dừng' : 'Phát video'}
               className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm shadow-indigo-600/30 cursor-pointer"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
@@ -281,6 +325,34 @@ export default function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Subtitle Color Toggle Button */}
+            {!isBurnedVideo && showOverlay && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSubtitleColor(prev => prev === 'white' ? 'yellow' : prev === 'yellow' ? 'cyan' : 'white');
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                  subtitleColor === 'white'
+                    ? 'bg-slate-900 text-white border-slate-700 shadow-xs'
+                    : subtitleColor === 'yellow'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-cyan-100 text-cyan-800 border-cyan-300'
+                }`}
+                title="Màu xem trước; chọn kiểu xuất trong hộp Burn Video"
+              >
+                <span
+                  className="w-2 h-2 rounded-full border border-slate-400 inline-block"
+                  style={{
+                    backgroundColor: subtitleColor === 'white' ? '#FFFFFF' : subtitleColor === 'yellow' ? '#FDE047' : '#67E8F9'
+                  }}
+                />
+                <span>
+                  {subtitleColor === 'white' ? 'Chữ Trắng' : subtitleColor === 'yellow' ? 'Chữ Vàng' : 'Chữ Xanh'}
+                </span>
+              </button>
+            )}
+
             {/* Clean Chinese Mode Selector Button */}
             {!isBurnedVideo && (
               <div className="relative">
@@ -296,8 +368,8 @@ export default function VideoPlayer({
                 >
                   <Shield className="w-3.5 h-3.5 text-amber-600" />
                   <span className="hidden sm:inline">
-                    {cleanMode === 'cinema_bars' ? '🎬 Rạp Phim (Xóa Hết)' :
-                     cleanMode === 'bottom_bar' ? '🛡️ Che Sub Dưới' :
+                    {cleanMode === 'cinema_bars' ? '🎬 Xem trước: thanh đen' :
+                     cleanMode === 'bottom_bar' ? '🛡️ Xem trước: che sub dưới' :
                      cleanMode === 'smart_blur' ? '🌫️ Làm Mờ' : '❌ Không Che'}
                   </span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />

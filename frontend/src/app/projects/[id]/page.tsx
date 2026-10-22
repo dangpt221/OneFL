@@ -1,8 +1,11 @@
 'use client';
+import { resolvePlayback, isProjectBusy } from '@/lib/projectView';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { createRefreshCoordinator } from '@/lib/refreshCoordinator';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import {
   ArrowLeft,
   Users,
@@ -24,12 +27,14 @@ import SpeakerMatrixModal from '@/components/SpeakerMatrixModal';
 import GlossaryModal from '@/components/GlossaryModal';
 import BurnProgressModal from '@/components/BurnProgressModal';
 import DubbingModal from '@/components/DubbingModal';
+import DubbingQualitySummary from '@/components/DubbingQualitySummary';
 import PipelineProgressTracker, { getFriendlyStageName, getFriendlyVoiceName } from '@/components/PipelineProgressTracker';
 
 export default function ProjectStudioPage() {
   const params = useParams();
   const projectId = params.id as string;
 
+  const [loadError, setLoadError] = useState('');
   const [project, setProject] = useState<Project | null>(null);
   const [cues, setCues] = useState<SubtitleCue[]>([]);
   const [speakers, setSpeakers] = useState<SpeakerProfile[]>([]);
@@ -48,10 +53,15 @@ export default function ProjectStudioPage() {
   const [isBurnModalOpen, setIsBurnModalOpen] = useState(false);
   const [isDubModalOpen, setIsDubModalOpen] = useState(false);
 
+  // Live Console Logs
+  const [liveLogs, setLiveLogs] = useState<Array<{ time: string; text: string; level?: 'info' | 'warn' | 'success' | 'error' }>>([]);
+
   // WebSocket Live Updates
   const { isConnected, lastMessage } = useProjectWebSocket(projectId);
 
-  const loadAllData = useCallback(async () => {
+  const loadRequest = useRef(0);
+  const fetchAllData = useCallback(async () => {
+    const request = loadRequest.current;
     try {
       const [projData, subData, spkData, gloData] = await Promise.all([
         api.getProject(projectId),
@@ -59,26 +69,53 @@ export default function ProjectStudioPage() {
         api.getSpeakerMatrix(projectId),
         api.getGlossary(projectId),
       ]);
+      if (request !== loadRequest.current) return;
+      setLoadError('');
       setProject(projData);
       setCues(subData.items);
       setSpeakers(spkData.speakers);
       setRelationships(spkData.relationships);
       setGlossaryTerms(gloData.items);
     } catch (e) {
-      console.error('Failed to load project studio data', e);
+      if (request !== loadRequest.current) return;
+      setLoadError(e instanceof Error ? e.message : 'Không tải được dự án');
     }
   }, [projectId]);
+
+  const refresh = useMemo(() => createRefreshCoordinator(fetchAllData), [fetchAllData]);
+  const loadAllData = useCallback(() => {
+    ++loadRequest.current; // Invalidate an older response immediately, before the trailing fetch.
+    return refresh.request();
+  }, [refresh]);
+  useEffect(() => () => {
+    ++loadRequest.current;
+    refresh.cancel();
+  }, [refresh]);
 
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  useEffect(() => { if (isConnected) void loadAllData(); }, [isConnected, loadAllData]);
+
+  useEffect(() => {
+    if (isConnected) return;
+    const interval = setInterval(() => void loadAllData(), 5000);
+    return () => clearInterval(interval);
+  }, [isConnected, loadAllData]);
 
   // Handle live WebSocket events
   useEffect(() => {
     if (!lastMessage) return;
 
     const msgType = (lastMessage.type || '').toUpperCase();
-    if (msgType === 'STAGE_CHANGED' || msgType === 'STATUS_UPDATE' || lastMessage.type === 'stage_changed') {
+    if (msgType === 'PIPELINE_ERROR' || msgType === 'PIPELINE_FAILED') {
+      setProject(prev => prev ? { ...prev, status: 'FAILED', error_message: lastMessage.data?.error || 'Xử lý thất bại' } : null);
+      toast.error(lastMessage.data?.error || 'Xử lý thất bại');
+      void loadAllData();
+    } else if (msgType === 'CUES_CHANGED') {
+      void loadAllData();
+    } else if (msgType === 'STAGE_CHANGED' || msgType === 'STATUS_UPDATE' || lastMessage.type === 'stage_changed') {
       const status = lastMessage.data?.status;
       const stage = lastMessage.data?.stage || lastMessage.data?.current_stage;
       const progress = lastMessage.data?.progress ?? lastMessage.data?.progress_percentage;
@@ -92,9 +129,9 @@ export default function ProjectStudioPage() {
         ...(stage ? { current_stage: stage } : {}),
         ...(progress !== undefined ? { progress_percentage: progress } : {}),
         ...(message ? { error_message: message } : {}),
-        ...(dubbed_audio_url ? { dubbed_audio_url } : {}),
-        ...(dubbed_video_url ? { dubbed_video_url } : {}),
-        ...(burned_video_url ? { burned_video_url } : {})
+        ...('dubbed_audio_url' in (lastMessage.data || {}) ? { dubbed_audio_url } : {}),
+        ...('dubbed_video_url' in (lastMessage.data || {}) ? { dubbed_video_url } : {}),
+        ...('burned_video_url' in (lastMessage.data || {}) ? { burned_video_url } : {})
       } : null);
       loadAllData();
     } else if (msgType === 'PROGRESS_UPDATE' || lastMessage.type === 'progress_update') {
@@ -110,12 +147,28 @@ export default function ProjectStudioPage() {
     } else if (msgType === 'TRANSLATION_PROGRESS') {
       setProject(prev => prev ? { 
         ...prev, 
-        progress_percentage: lastMessage.data.percentage,
+        progress_percentage: lastMessage.data.progress ?? prev.progress_percentage,
         error_message: lastMessage.data.message || prev.error_message 
       } : null);
+      const batch = new Map<number, string>((lastMessage.data.latest_batch || []).map((c: { id: number; text: string }) => [c.id, c.text]));
+      setCues(previous => previous.map(c => batch.has(c.cue_index) ? { ...c, translated_text: batch.get(c.cue_index) } : c));
     } else if (msgType === 'CUE_UPDATED') {
       const updatedCue = lastMessage.data as SubtitleCue;
       setCues(prev => prev.map(c => c.id === updatedCue.id ? updatedCue : c));
+    }
+
+    // Append to liveLogs terminal console
+    if (lastMessage.data?.message) {
+      const timeStr = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+      const extra = lastMessage.data?.current_cue ? ` ── "${lastMessage.data.current_cue}"` : '';
+      setLiveLogs(prev => [
+        ...prev.slice(-99),
+        {
+          time: timeStr,
+          text: `${lastMessage.data.message}${extra}`,
+          level: msgType.includes('FAIL') ? 'error' : msgType.includes('COMPLETED') ? 'success' : 'info'
+        }
+      ]);
     }
   }, [lastMessage, projectId, loadAllData]);
 
@@ -134,7 +187,7 @@ export default function ProjectStudioPage() {
       const updatedMap = new Map(updated.map(u => [u.id, u]));
       setCues(prev => prev.map(c => updatedMap.get(c.id) || c));
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Thao tác thất bại");
     }
   };
 
@@ -148,9 +201,9 @@ export default function ProjectStudioPage() {
   }) => {
     try {
       await api.startBurning(projectId, options);
-      loadAllData();
+      await loadAllData();
     } catch (e) {
-      console.error(e);
+      throw e;
     }
   };
 
@@ -159,10 +212,10 @@ export default function ProjectStudioPage() {
   const handleStartPipeline = async () => {
     try {
       setIsPipelineRunning(true);
-      await api.triggerPipeline(projectId, 'INGESTING');
+      await api.triggerPipeline(projectId, cues.length ? 'TRANSLATING' : 'INGESTING', cues.length > 0);
       loadAllData();
     } catch (e) {
-      console.error('Failed to trigger pipeline', e);
+      toast.error(e instanceof Error ? e.message : 'Không khởi chạy được pipeline');
     } finally {
       setTimeout(() => setIsPipelineRunning(false), 2000);
     }
@@ -172,13 +225,16 @@ export default function ProjectStudioPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <p className="text-sm font-semibold text-slate-600">Loading OneFL Studio Workspace...</p>
+        <p className="text-sm font-semibold text-slate-600">{loadError || 'Đang tải OneFL Studio…'}</p>
       </div>
     );
   }
 
+  const playback = resolvePlayback(project, activeVideoSource);
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
+      {loadError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{loadError}</p>}
       {/* Studio Top Action Bar */}
       <div className="bg-white rounded-3xl p-4 lg:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Left: Navigation & Project Info */}
@@ -276,10 +332,10 @@ export default function ProjectStudioPage() {
           </div>
 
           {/* Group 2: Production Actions */}
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap w-full sm:w-auto items-center gap-2">
             <button
               onClick={handleStartPipeline}
-              disabled={isPipelineRunning || project.status === 'PROCESSING'}
+              disabled={isPipelineRunning || isProjectBusy(project)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
               title="Khởi chạy nhận diện giọng nói và dịch phụ đề AI"
             >
@@ -388,6 +444,8 @@ export default function ProjectStudioPage() {
         cuesCount={cues.length}
         translatedCuesCount={cues.filter(c => !!c.translated_text).length}
         onRetry={handleStartPipeline}
+        onRefresh={loadAllData}
+        liveLogs={liveLogs}
       />
 
       {/* Main Studio Grid: Video Player on Left (Sticky), Subtitle Grid on Right */}
@@ -395,14 +453,14 @@ export default function ProjectStudioPage() {
         {/* Left: Video Player & Sticky Media Panel */}
         <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-20">
           {/* Video Track Selector Tabs */}
-          {(project.burned_video_url || project.dubbed_video_url) && (
+          {(project.burned_video_url || project.dubbed_video_url || project.dubbed_audio_url) && (
             <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200 text-xs font-medium">
-              {project.dubbed_video_url && (
+              {(project.dubbed_video_url || project.dubbed_audio_url) && (
                 <button
                   type="button"
                   onClick={() => setActiveVideoSource('dubbed')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    (activeVideoSource === 'dubbed' || (activeVideoSource === 'auto' && project.dubbed_video_url))
+                    (playback.kind === 'dubbed')
                       ? 'bg-white text-slate-900 font-bold shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -416,7 +474,7 @@ export default function ProjectStudioPage() {
                   type="button"
                   onClick={() => setActiveVideoSource('burned')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    (activeVideoSource === 'burned' || (activeVideoSource === 'auto' && !project.dubbed_video_url && project.burned_video_url))
+                    (playback.kind === 'burned')
                       ? 'bg-white text-slate-900 font-bold shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -442,24 +500,9 @@ export default function ProjectStudioPage() {
           )}
 
           <VideoPlayer
-            videoUrl={
-              (() => {
-                const url = activeVideoSource === 'burned' && project.burned_video_url ? project.burned_video_url :
-                  activeVideoSource === 'dubbed' && project.dubbed_video_url ? project.dubbed_video_url :
-                  activeVideoSource === 'original' && project.original_video_url ? project.original_video_url :
-                  (project.dubbed_video_url || project.burned_video_url || project.original_video_url);
-                  
-                if (!url) return undefined;
-                if (url.includes('bilibili.com') || url.includes('b23.tv') || url.includes('youtube.com') || url.includes('youtu.be') || url.includes('douyin.com')) {
-                  return undefined;
-                }
-                return url;
-              })()
-            }
-            isBurnedVideo={
-              activeVideoSource === 'burned' ||
-              (activeVideoSource === 'auto' && !project.dubbed_video_url && !!project.burned_video_url)
-            }
+            videoUrl={playback.videoUrl}
+            dubbedAudioUrl={playback.dubbedAudioUrl}
+            isBurnedVideo={playback.isBurnedVideo}
             cues={cues}
             currentTime={currentTime}
             onTimeUpdate={setCurrentTime}
@@ -566,12 +609,15 @@ export default function ProjectStudioPage() {
             cues={cues}
             speakers={speakers}
             currentTime={currentTime}
+            videoDuration={project.video_duration_seconds}
             onSeek={handleSeek}
             onCueUpdated={handleCueUpdated}
             onRetranslateRequested={handleRetranslateRequested}
           />
         </div>
       </div>
+
+      <DubbingQualitySummary projectId={projectId} audioUrl={project.dubbed_audio_url} />
 
       {/* Modals */}
       <DubbingModal

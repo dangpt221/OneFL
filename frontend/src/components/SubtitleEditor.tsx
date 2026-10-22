@@ -1,4 +1,5 @@
 'use client';
+import toast from 'react-hot-toast';
 
 import { useState, useMemo, useDeferredValue, useEffect, useRef } from 'react';
 import {
@@ -18,12 +19,15 @@ import {
 } from 'lucide-react';
 import { SubtitleCue, SpeakerProfile } from '@/lib/types';
 import { api } from '@/lib/api';
+import { validateCueTiming, formatCueTimestamp } from '@/lib/cueTiming';
+import { overlappingCueIds } from '@/lib/subtitleTimeline';
 
 interface SubtitleEditorProps {
   projectId: string;
   cues: SubtitleCue[];
   speakers?: SpeakerProfile[];
   currentTime: number;
+  videoDuration?: number | null;
   onSeek: (time: number) => void;
   onCueUpdated: (cue: SubtitleCue) => void;
   onRetranslateRequested: (cueIds: string[]) => void;
@@ -34,6 +38,7 @@ export default function SubtitleEditor({
   cues,
   speakers = [],
   currentTime,
+  videoDuration,
   onSeek,
   onCueUpdated,
   onRetranslateRequested,
@@ -45,7 +50,16 @@ export default function SubtitleEditor({
   const [selectedCueIds, setSelectedCueIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+  const [editError, setEditError] = useState('');
+  const [editBase, setEditBase] = useState<SubtitleCue | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const overlapIds = useMemo(() => overlappingCueIds(cues), [cues]);
+  const remoteCue = cues.find(cue => cue.id === editingId);
+  const editConflict = !!(editBase && remoteCue && (
+    remoteCue.translated_text !== editBase.translated_text || remoteCue.start_time !== editBase.start_time ||
+    remoteCue.end_time !== editBase.end_time || remoteCue.speaker_tag !== editBase.speaker_tag));
 
   // Performance Pagination state
   const [pageSize, setPageSize] = useState<number>(50);
@@ -61,33 +75,39 @@ export default function SubtitleEditor({
     return Array.from(new Set(cues.map(c => c.speaker_tag).filter(Boolean)));
   }, [cues]);
 
-  const formatTimestamp = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    const ms = Math.floor((secs % 1) * 10);
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms}`;
-  };
-
   const handleStartEdit = (cue: SubtitleCue) => {
     setEditingId(cue.id);
     setEditText(cue.translated_text || cue.original_text);
+    setEditStart(String(cue.start_time));
+    setEditEnd(String(cue.end_time));
+    setEditBase({ ...cue });
+    setEditError('');
   };
 
   const handleSaveEdit = async (cue: SubtitleCue) => {
-    if (editText === cue.translated_text) {
+    if (editConflict) return;
+    const timingError = validateCueTiming(editStart, editEnd, videoDuration);
+    if (timingError) { setEditError(timingError); return; }
+    if (!editText.trim()) { setEditError('Lời dịch không được để trống.'); return; }
+    if (editText === cue.translated_text && Number(editStart) === cue.start_time && Number(editEnd) === cue.end_time) {
       setEditingId(null);
       return;
     }
 
     setIsSaving(true);
+    setEditError('');
     try {
       const updated = await api.updateCue(projectId, cue.id, {
         translated_text: editText,
+        start_time: Number(editStart),
+        end_time: Number(editEnd),
       });
       onCueUpdated(updated);
       setEditingId(null);
     } catch (e) {
-      console.error(e);
+      const message = e instanceof Error ? e.message : 'Không lưu được thay đổi';
+      setEditError(message);
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -131,28 +151,28 @@ export default function SubtitleEditor({
   // Find currently active cue index
   const activeCueIndex = useMemo(() => {
     return filteredCues.findIndex(
-      c => currentTime >= c.start_time && currentTime <= c.end_time
+      c => currentTime >= c.start_time && currentTime < c.end_time
     );
   }, [filteredCues, currentTime]);
 
   // Auto-follow video playhead to current page
   useEffect(() => {
-    if (!autoFollowVideo || activeCueIndex === -1) return;
+    if (!autoFollowVideo || editingId || activeCueIndex === -1) return;
     const targetPage = Math.floor(activeCueIndex / pageSize) + 1;
     if (targetPage !== currentPage) {
       setCurrentPage(targetPage);
     }
-  }, [activeCueIndex, autoFollowVideo, pageSize, currentPage]);
+  }, [activeCueIndex, autoFollowVideo, pageSize, currentPage, editingId]);
 
   // Scroll active cue into view inside current page
   useEffect(() => {
-    if (activeCardRef.current && autoFollowVideo) {
+    if (activeCardRef.current && autoFollowVideo && !editingId) {
       activeCardRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'nearest',
       });
     }
-  }, [activeCueIndex, autoFollowVideo]);
+  }, [activeCueIndex, autoFollowVideo, editingId]);
 
   const handlePageChange = (newPage: number) => {
     const clamped = Math.max(1, Math.min(totalPages, newPage));
@@ -318,7 +338,7 @@ export default function SubtitleEditor({
           </div>
         ) : (
           paginatedCues.map((cue) => {
-            const isActive = currentTime >= cue.start_time && currentTime <= cue.end_time;
+            const isActive = currentTime >= cue.start_time && currentTime < cue.end_time;
             const isSelected = selectedCueIds.includes(cue.id);
 
             return (
@@ -333,9 +353,9 @@ export default function SubtitleEditor({
                     : 'bg-white hover:bg-slate-50/80 border-slate-200 shadow-2xs'
                 }`}
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
                   {/* Checkbox, Index & Time */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -352,11 +372,17 @@ export default function SubtitleEditor({
                       title="Nhảy đến đoạn này trên video"
                     >
                       <Play className="w-2.5 h-2.5 fill-current" />
-                      <span>{formatTimestamp(cue.start_time)}</span>
+                      <span>{formatCueTimestamp(cue.start_time)} → {formatCueTimestamp(cue.end_time)}</span>
                     </button>
                     <span className="text-[10px] text-slate-400 font-bold font-mono">
                       #{cue.cue_index}
                     </span>
+                    <button type="button" onClick={() => handleStartEdit(cue)} disabled={isSaving}
+                      className="text-[10px] text-indigo-700 underline" title="Sửa mốc bắt đầu và kết thúc">
+                      Sửa thời gian
+                    </button>
+                    {overlapIds.has(cue.id) && <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 rounded"
+                      title="Câu này chồng thời gian với câu khác; kiểm tra người nói và mốc thời gian">Chồng thời gian</span>}
                     {isActive && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-600 text-white animate-pulse">
                         Đang phát
@@ -373,7 +399,7 @@ export default function SubtitleEditor({
                       const curName = curSpk?.display_name || cue.speaker_tag;
 
                       return (
-                        <div className="relative flex items-center">
+                        <div className="relative flex min-w-0 max-w-full items-center">
                           <span
                             className="w-2 h-2 rounded-full absolute left-2 pointer-events-none z-10"
                             style={{ backgroundColor: curColor }}
@@ -386,10 +412,10 @@ export default function SubtitleEditor({
                                 const updated = await api.updateCue(projectId, cue.id, { speaker_tag: newTag });
                                 onCueUpdated(updated);
                               } catch (err) {
-                                console.error(err);
+                                toast.error(err instanceof Error ? err.message : 'Thao tác thất bại');
                               }
                             }}
-                            className="appearance-none pl-5 pr-3 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 text-slate-800 border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer focus:outline-none"
+                            className="max-w-[180px] truncate appearance-none pl-5 pr-3 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 text-slate-800 border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer focus:outline-none"
                             title="Nhấp để đổi nhân vật phát ngôn cho câu thoại này"
                           >
                             {speakers.length > 0 ? (
@@ -446,23 +472,43 @@ export default function SubtitleEditor({
 
                     {editingId === cue.id ? (
                       <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-[10px] text-slate-600">Bắt đầu (giây)
+                            <input aria-label="Bắt đầu (giây)" type="number" min="0" step="0.001" value={editStart}
+                              disabled={isSaving} onChange={event => setEditStart(event.target.value)}
+                              className="mt-1 w-full min-w-0 rounded border border-indigo-200 bg-white p-1.5 text-xs" />
+                          </label>
+                          <label className="text-[10px] text-slate-600">Kết thúc (giây)
+                            <input aria-label="Kết thúc (giây)" type="number" min="0" step="0.001" value={editEnd}
+                              disabled={isSaving} onChange={event => setEditEnd(event.target.value)}
+                              className="mt-1 w-full min-w-0 rounded border border-indigo-200 bg-white p-1.5 text-xs" />
+                          </label>
+                        </div>
                         <textarea
                           value={editText}
+                          aria-label="Lời dịch"
+                          disabled={isSaving}
                           onChange={(e) => setEditText(e.target.value)}
                           rows={2}
                           className="w-full p-2 rounded-lg bg-white border border-indigo-500 text-slate-900 text-xs focus:outline-none shadow-xs"
                           autoFocus
                         />
+                        {editError && <p role="alert" className="text-xs text-rose-700">{editError}</p>}
+                        {editConflict && <div role="alert" className="text-xs text-amber-800">
+                          Câu đã thay đổi ở phiên khác. Bản nháp vẫn được giữ; sao chép nếu cần trước khi nạp bản mới.
+                          <button type="button" onClick={() => handleStartEdit(cue)} className="ml-2 underline">Nạp bản mới</button>
+                        </div>}
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => setEditingId(null)}
+                            disabled={isSaving}
                             className="px-2 py-1 rounded bg-slate-100 text-[10px] text-slate-600 hover:text-slate-900"
                           >
                             Hủy
                           </button>
                           <button
                             onClick={() => handleSaveEdit(cue)}
-                            disabled={isSaving}
+                            disabled={isSaving || editConflict}
                             className="px-2.5 py-1 rounded bg-indigo-600 text-[10px] font-bold text-white hover:bg-indigo-700"
                           >
                             Lưu

@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from app.config import settings
+from app.services.media_process import run_media, probe_media
+from app.services.resource_limits import bounded_resource
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +44,10 @@ class VideoBurner:
                 "-f", "null", "-"
             ]
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL
-                )
-                await asyncio.wait_for(proc.wait(), timeout=3.0)
-                if proc.returncode == 0:
-                    logger.info(f"Hardware video encoder detected and verified: {enc}")
-                    self._cached_encoder = enc
-                    return enc
+                await run_media(cmd, timeout=3)
+                logger.info('Hardware encoder verified: %s', enc)
+                self._cached_encoder = enc
+                return enc
             except Exception as e:
                 logger.debug(f"Encoder test {enc} failed or timed out: {e}")
 
@@ -87,47 +83,30 @@ class VideoBurner:
         - 'cinema_zoom': Crop top & bottom and scale to full frame (zoom 108-112%), eliminating borders.
         - 'none': Direct subtitle burn without masking.
         """
-        top_pct = max(0.04, min(0.28, float(top_mask_pct)))
-        bot_pct = max(0.06, min(0.35, float(bottom_mask_pct)))
+        top_pct = max(0.0, min(0.28, float(top_mask_pct)))
+        bot_pct = max(0.0, min(0.35, float(bottom_mask_pct)))
 
-        if not mask_original_sub or clean_chinese_mode == "none":
+        if not mask_original_sub or clean_chinese_mode == "none" or not (top_pct or bot_pct):
             return f"ass={ass_filename}"
-
-        if clean_chinese_mode == "cinema_bars":
-            return (
-                f"drawbox=x=0:y=0:w=iw:h=ih*{top_pct:.3f}:color=black@1.0:t=fill,"
-                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
-                f"ass={ass_filename}"
-            )
-        elif clean_chinese_mode == "bottom_bar":
-            return (
-                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
-                f"ass={ass_filename}"
-            )
-        elif clean_chinese_mode == "smart_blur":
-            return (
-                f"split[m0][b0];"
-                f"[b0]crop=iw:ih*{top_pct:.3f}:0:0,boxblur=8:2[topb];"
-                f"[m0][topb]overlay=0:0[m1];"
-                f"[m1]split[m2][b1];"
-                f"[b1]crop=iw:ih*{bot_pct:.3f}:0:ih-ih*{bot_pct:.3f},boxblur=8:2[botb];"
-                f"[m2][botb]overlay=0:H-h[m3];"
-                f"[m3]ass={ass_filename}"
-            )
-        elif clean_chinese_mode == "cinema_zoom":
+        filters = []
+        if clean_chinese_mode == "smart_blur":
+            # Skip zero-height crops; FFmpeg interprets zero drawbox height as
+            # the full input height and rejects an empty crop.
+            for index, (pct, y, overlay_y) in enumerate(((top_pct, '0', '0'), (bot_pct, f'ih-ih*{bot_pct:.3f}', 'H-h'))):
+                if pct > 0:
+                    filters.append(f"split[m{index}][b{index}];[b{index}]crop=iw:max(2\\,trunc(ih*{pct:.3f}/2)*2):0:{y},boxblur=luma_radius=min(8\\,min(w\\,h)/2):luma_power=2:chroma_radius=0[t{index}];[m{index}][t{index}]overlay=0:{overlay_y}")
+            return ','.join(filters) + f",ass={ass_filename}"
+        if clean_chinese_mode == "cinema_zoom":
             cut_pct = top_pct + bot_pct
-            return (
-                f"crop=iw:ih*(1.0-{cut_pct:.3f}):0:ih*{top_pct:.3f},"
-                f"scale=iw:ih:flags=lanczos,"
-                f"ass={ass_filename}"
-            )
-        else:
-            return (
-                f"drawbox=x=0:y=0:w=iw:h=ih*{top_pct:.3f}:color=black@1.0:t=fill,"
-                f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill,"
-                f"ass={ass_filename}"
-            )
+            return (f"crop=iw:ih*(1.0-{cut_pct:.3f}):0:ih*{top_pct:.3f},"
+                    f"scale=iw:trunc(ih/(1.0-{cut_pct:.3f})/2)*2:flags=lanczos,ass={ass_filename}")
+        if clean_chinese_mode != "bottom_bar" and top_pct > 0:
+            filters.append(f"drawbox=x=0:y=0:w=iw:h=ih*{top_pct:.3f}:color=black@1.0:t=fill")
+        if bot_pct > 0:
+            filters.append(f"drawbox=x=0:y=ih-ih*{bot_pct:.3f}:w=iw:h=ih*{bot_pct:.3f}:color=black@1.0:t=fill")
+        return ','.join(filters + [f"ass={ass_filename}"])
 
+    @bounded_resource('video-burn', lambda: settings.MAX_CONCURRENT_GPU_BURN_WORKERS)
     async def burn_subtitles_to_video(
         self,
         video_path: Path,
@@ -137,7 +116,9 @@ class VideoBurner:
         clean_chinese_mode: str = "cinema_bars",
         top_mask_pct: float = 0.11,
         bottom_mask_pct: float = 0.15,
-        gpu_device_id: int = 0
+        gpu_device_id: int = 0,
+        start_time: Optional[float] = None,
+        duration: Optional[float] = None,
     ) -> Path:
         """Burns ASS subtitles into video using auto-detected GPU hardware acceleration or libx264."""
         output_video_path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,16 +150,17 @@ class VideoBurner:
                 "-b:a", settings.BURN_OUTPUT_AUDIO_BITRATE,
                 str(output_video_path.resolve())
             ]
+            if start_time is not None:
+                cmd[2:2] = ['-ss', str(start_time)]
+            if duration is not None:
+                cmd[-1:-1] = ['-t', str(duration)]
             logger.info(f"Burning subtitles with {best_enc} in {ass_dir}: {' '.join(cmd)}")
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=str(ass_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                logger.warning(f"Hardware burn with {best_enc} failed ({stderr.decode(errors='ignore')}). Retrying with libx264 CPU fallback...")
+            try:
+                await run_media(cmd, cwd=ass_dir)
+            except RuntimeError:
+                if best_enc == 'libx264':
+                    raise
+                logger.warning("Hardware burn failed; retrying with libx264", exc_info=True)
                 cpu_args = self._get_encoder_args("libx264")
                 cpu_cmd = [
                     ffmpeg_bin,
@@ -190,24 +172,14 @@ class VideoBurner:
                     "-b:a", settings.BURN_OUTPUT_AUDIO_BITRATE,
                     str(output_video_path.resolve())
                 ]
-                proc_cpu = await asyncio.create_subprocess_exec(
-                    *cpu_cmd,
-                    cwd=str(ass_dir),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                await proc_cpu.communicate()
-                if proc_cpu.returncode != 0:
-                    logger.warning("FFmpeg burn failed completely. Copying original video.")
-                    shutil.copyfile(video_path, output_video_path)
+                if start_time is not None:
+                    cpu_cmd[2:2] = ['-ss', str(start_time)]
+                if duration is not None:
+                    cpu_cmd[-1:-1] = ['-t', str(duration)]
+                await run_media(cpu_cmd, cwd=ass_dir)
+            await probe_media(output_video_path, require_video=True)
         else:
-            logger.info("FFmpeg not available. Copying video file as burned output simulation.")
-            if video_path.exists():
-                shutil.copyfile(video_path, output_video_path)
-            else:
-                # Create small placeholder video
-                with open(output_video_path, "wb") as f:
-                    f.write(b"placeholder_video_data")
+            raise RuntimeError("FFmpeg is required to burn subtitles")
 
         return output_video_path
 
@@ -220,7 +192,9 @@ class VideoBurner:
         output_final_path.parent.mkdir(parents=True, exist_ok=True)
         
         if not chunk_video_paths:
-            return output_final_path
+            raise ValueError("Cannot concatenate an empty chunk list")
+        for path in chunk_video_paths:
+            await probe_media(path, require_video=True)
 
         if len(chunk_video_paths) == 1:
             if chunk_video_paths[0].exists():
@@ -230,7 +204,8 @@ class VideoBurner:
         filelist_txt = output_final_path.parent / "filelist.txt"
         with open(filelist_txt, "w", encoding="utf-8") as f:
             for p in chunk_video_paths:
-                f.write(f"file '{p.resolve().as_posix()}'\n")
+                escaped = p.resolve().as_posix().replace("'", "'\\''")
+                f.write(f"file '{escaped}'\n")
 
         if self.is_ffmpeg_available():
             ffmpeg_bin = settings.get_ffmpeg_bin()
@@ -243,15 +218,13 @@ class VideoBurner:
                 "-c", "copy",
                 str(output_final_path)
             ]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            await proc.communicate()
+            try:
+                await run_media(cmd)
+                await probe_media(output_final_path, require_video=True)
+            finally:
+                filelist_txt.unlink(missing_ok=True)
         else:
-            if chunk_video_paths[0].exists():
-                shutil.copyfile(chunk_video_paths[0], output_final_path)
+            raise RuntimeError("FFmpeg is required to concatenate media")
 
         return output_final_path
 

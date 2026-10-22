@@ -15,6 +15,11 @@ class Project(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    user_id = Column(String(100), nullable=False, default='local', index=True)
+    active_job_id = Column(String(36), nullable=True, index=True)
+    last_dub_config = Column(JSON, nullable=True)
+    content_revision = Column(Integer, nullable=False, default=0)
+    last_job_kind = Column(String(30), nullable=True)
     
     # Video & Media URLs/Paths
     original_video_url = Column(Text, nullable=True)
@@ -53,6 +58,7 @@ class Project(Base):
     speakers = relationship("SpeakerProfile", back_populates="project", cascade="all, delete-orphan")
     relationships = relationship("RelationshipMatrix", back_populates="project", cascade="all, delete-orphan")
     glossaries = relationship("GlossaryTerm", back_populates="project", cascade="all, delete-orphan")
+    jobs = relationship('Job', cascade='all, delete-orphan', passive_deletes=True)
 
 
 class VideoChunk(Base):

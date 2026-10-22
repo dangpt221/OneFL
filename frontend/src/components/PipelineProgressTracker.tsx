@@ -1,5 +1,6 @@
 'use client';
 
+import { api } from '@/lib/api';
 import { Project } from '@/lib/types';
 import {
   AlertCircle,
@@ -15,9 +16,13 @@ import {
   Languages,
   Loader2,
   Mic,
+  Play,
   RefreshCw,
   Sliders,
   Sparkles,
+  Square,
+  Terminal,
+  Trash2,
   Users
 } from 'lucide-react';
 import React, { useState } from 'react';
@@ -33,7 +38,7 @@ export interface StepItem {
 }
 
 export interface WorkflowInfo {
-  type: 'DUBBING' | 'TRANSLATION' | 'BURNING' | 'DOWNLOAD';
+  type: 'DUBBING' | 'TRANSLATION' | 'BURNING' | 'DOWNLOAD' | 'QUEUED' | 'ASR';
   title: string;
   badge: string;
   badgeColor: string;
@@ -50,6 +55,8 @@ export function getFriendlyStageName(stage?: string): string {
       return 'Trích xuất âm thanh (16kHz)';
     case 'ASR_PROCESSING':
       return 'Nhận diện giọng nói (Whisper AI)';
+    case 'ASR_COMPLETE':
+      return 'Đã nhận diện thoại; chờ dịch phụ đề';
     case 'SPEAKER_PROFILING':
       return 'Phân tích nhân vật & Xưng hô';
     case 'TRANSLATING':
@@ -106,12 +113,29 @@ export function getWorkflowDetails(
   translatedCuesCount: number = 0
 ): WorkflowInfo {
   const isFailed = project.status === 'FAILED';
-  const isCompleted = project.status === 'COMPLETED' || project.current_stage === 'COMPLETED' || (project.progress_percentage !== undefined && project.progress_percentage >= 100);
+  const isCompleted = project.status === 'COMPLETED' || project.current_stage === 'COMPLETED' || (project.last_job_kind === 'DUBBING' && project.status === 'WAITING_REVIEW' && !!project.dubbed_video_url);
   const stage = project.current_stage || '';
   const status = project.status || '';
+  if (status === 'QUEUED') return {
+    type: 'QUEUED', title: 'Đang chờ worker nhận tác vụ', badge: 'Hàng đợi', badgeColor: 'bg-indigo-50 text-indigo-700', currentStepIndex: 0,
+    steps: [{ id: 'queue', name: 'Chờ xử lý', shortDesc: 'Tác vụ đã được lưu', detailedDesc: 'Giao diện cập nhật khi worker bắt đầu xử lý.', icon: <Loader2 className="w-4 h-4" />, status: 'current' }],
+  };
+
+  if (project.last_job_kind === 'TRANSCRIBE') {
+    const done = stage === 'ASR_COMPLETE';
+    const index = stage === 'INGESTING' || (isFailed && project.progress_percentage <= 10) ? 0 : 1;
+    return {
+      type: 'ASR', title: 'Trích xuất & Nhận diện thoại', badge: 'ASR',
+      badgeColor: 'bg-indigo-50 text-indigo-700', currentStepIndex: index,
+      steps: [
+        { id: 'extract', name: 'Trích xuất âm thanh', shortDesc: 'Audio 16 kHz mono', detailedDesc: 'Chuẩn bị audio từ video của project.', icon: <FileAudio className="w-4 h-4" />, status: done || index > 0 ? 'completed' : isFailed ? 'failed' : 'current' },
+        { id: 'asr', name: 'Nhận diện thoại', shortDesc: 'Lưu transcript vào Studio', detailedDesc: 'Có transcript để kiểm duyệt; chưa thực hiện dịch thuật hoặc lồng tiếng.', icon: <Mic className="w-4 h-4" />, status: done ? 'completed' : isFailed && index === 1 ? 'failed' : index === 1 ? 'current' : 'pending', completedSummary: `Đã nhận diện ${cuesCount} câu; chờ dịch phụ đề` },
+      ],
+    };
+  }
 
   // 1. DUBBING WORKFLOW
-  if (status === 'DUBBING' || stage.startsWith('DUBBING') || (isCompleted && project.dubbed_video_url)) {
+  if (status === 'DUBBING' || stage.startsWith('DUBBING') || (project.last_job_kind === 'DUBBING' && (isCompleted || isFailed)) || (isCompleted && project.dubbed_video_url && !project.burned_video_url)) {
     const voiceDisplayName = getFriendlyVoiceName(project.default_voice);
 
     let currentIndex = 1; // Default is voice synthesis (Step 2)
@@ -137,13 +161,13 @@ export function getWorkflowDetails(
         detailedDesc: 'Mô hình Neural AI chuyển đổi từng câu phụ đề tiếng Việt thành file audio giọng đọc tự nhiên.',
         icon: <Sparkles className="w-4 h-4" />,
         status: isFailed && currentIndex === 1 ? 'failed' : (currentIndex > 1 || isCompleted) ? 'completed' : currentIndex === 1 ? 'current' : 'pending',
-        completedSummary: '✓ Đã tạo audio giọng đọc cho tất cả 7.896 câu thoại',
+        completedSummary: `✓ Đã tạo giọng đọc cho ${cuesCount} câu thoại`,
       },
       {
         id: 'dub-mixing',
         name: 'Đồng bộ timeline & Ghép Video',
         shortDesc: 'Audio ducking & Muxing video (~2 phút)',
-        detailedDesc: 'Tự động giảm âm thanh nền (ducking) và hòa trộn âm thanh lồng tiếng vào video gốc (Video dài 6.3h, thời gian ghép ~2-3 phút).',
+        detailedDesc: 'Tự động giảm âm thanh nền (ducking) và hòa trộn âm thanh lồng tiếng vào video gốc (thời gian ghép tùy thời lượng video).',
         icon: <Sliders className="w-4 h-4" />,
         status: isFailed && currentIndex === 2 ? 'failed' : (currentIndex > 2 || isCompleted) ? 'completed' : currentIndex === 2 ? 'current' : 'pending',
         completedSummary: '✓ Đã hòa trộn âm thanh lồng tiếng vào video gốc thành công',
@@ -170,7 +194,7 @@ export function getWorkflowDetails(
   }
 
   // 2. BURNING WORKFLOW
-  if (status === 'BURNING' || stage === 'BURNING') {
+  if (status === 'BURNING' || stage === 'BURNING' || (project.last_job_kind === 'BURN' && (isCompleted || isFailed)) || (isCompleted && project.burned_video_url)) {
     let currentIndex = 1;
     if (isCompleted) currentIndex = 2;
 
@@ -296,7 +320,7 @@ export function getWorkflowDetails(
       detailedDesc: 'Phân tích người nói (diarization), nhận diện vai vế, quan hệ xã hội để tạo xưng hô tự nhiên.',
       icon: <Users className="w-4 h-4" />,
       status: isFailed && currentIndex === 2 ? 'failed' : isSpeakerDone ? 'completed' : isAsrDone ? 'current' : 'pending',
-      completedSummary: totalSpeakers > 0 ? `✓ Đã xác định ${totalSpeakers} nhân vật & quan hệ xưng hô` : '✓ Đã hoàn tất ma trận xưng hô nhân vật',
+      completedSummary: totalSpeakers > 0 ? `✓ Đã xác định ${totalSpeakers} nhân vật & quan hệ xưng hô` : 'Chưa có hồ sơ nhân vật; sử dụng nhãn ASR',
     },
     {
       id: 'pipe-translate',
@@ -333,6 +357,10 @@ interface PipelineProgressTrackerProps {
   cuesCount?: number;
   translatedCuesCount?: number;
   onRetry?: () => void;
+  onResume?: () => void;
+  onReset?: () => void;
+  onRefresh?: () => void;
+  liveLogs?: Array<{ time: string; text: string; level?: 'info' | 'warn' | 'success' | 'error' }>;
   className?: string;
   defaultExpanded?: boolean;
 }
@@ -342,10 +370,49 @@ export default function PipelineProgressTracker({
   cuesCount = 0,
   translatedCuesCount = 0,
   onRetry,
+  onResume,
+  onReset,
+  onRefresh,
+  liveLogs = [],
   className = '',
   defaultExpanded = true,
 }: PipelineProgressTrackerProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
+  const [showTerminal, setShowTerminal] = useState<boolean>(true);
+
+  const handleResume = async () => {
+    try {
+      setIsActionLoading(true);
+      if (onResume) {
+        await onResume();
+      } else {
+        await api.resumeProjectDubbing(project.id);
+        if (onRefresh) onRefresh();
+      }
+    } catch (err: any) {
+      alert("Không thể tiếp tục quy trình: " + (err.message || err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!confirm("Bạn có chắc chắn muốn đặt lại trạng thái về Studio để tiếp tục thao tác? Toàn bộ các câu đã lồng tiếng hoặc dịch sẽ KHÔNG bị mất.")) return;
+    try {
+      setIsActionLoading(true);
+      if (onReset) {
+        await onReset();
+      } else {
+        await api.resetProjectStatus(project.id, 'WAITING_REVIEW');
+        if (onRefresh) onRefresh();
+      }
+    } catch (err: any) {
+      alert("Không thể đặt lại: " + (err.message || err));
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   const workflow = getWorkflowDetails(project, cuesCount, translatedCuesCount);
   const isFailed = project.status === 'FAILED';
@@ -367,6 +434,21 @@ export default function PipelineProgressTracker({
     }
     return currentStep?.detailedDesc || 'Hệ thống đang xử lý tự động...';
   })();
+
+  const nowStr = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+  const allLogs = [
+    {
+      time: nowStr,
+      text: `[HỆ THỐNG] Dự án: "${project.title.slice(0, 45)}..." · Trạng thái: ${project.status} (${project.progress_percentage}%)`,
+      level: 'info' as const
+    },
+    ...(project.error_message ? [{
+      time: nowStr,
+      text: project.error_message,
+      level: isFailed ? ('error' as const) : ('info' as const)
+    }] : []),
+    ...liveLogs
+  ];
 
   return (
     <div className={`rounded-3xl bg-white border border-indigo-100/90 shadow-sm overflow-hidden transition-all duration-300 ${className}`}>
@@ -469,15 +551,62 @@ export default function PipelineProgressTracker({
                       ? 'Sẵn sàng kiểm duyệt'
                       : `Đang thực hiện: ${currentStep.name}`}
               </span>
-              {isFailed && onRetry && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {isProcessing && (
+                  <>
+                    <button
+                      onClick={handleResume}
+                      disabled={isActionLoading}
+                      className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-xs cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
+                      title="Chạy tiếp quy trình lồng tiếng (tự động bỏ qua các câu đã tạo sẵn)"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>{isActionLoading ? 'Đang gửi...' : 'Tiếp tục chạy'}</span>
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      disabled={isActionLoading}
+                      className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-rose-100 text-slate-700 hover:text-rose-700 transition-all border border-slate-300/80 cursor-pointer disabled:opacity-50"
+                      title="Đặt lại trạng thái về Studio để tiếp tục thao tác"
+                    >
+                      <Square className="w-3 h-3" />
+                      <span>Dừng / Đặt lại</span>
+                    </button>
+                  </>
+                )}
+                {isFailed && (
+                  <>
+                    {onRetry && (
+                      <button
+                        onClick={onRetry}
+                        className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Thử lại</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={handleReset}
+                      className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer"
+                    >
+                      <Square className="w-3 h-3" />
+                      <span>Đặt lại Studio</span>
+                    </button>
+                  </>
+                )}
                 <button
-                  onClick={onRetry}
-                  className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer"
+                  onClick={() => setShowTerminal(!showTerminal)}
+                  className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all border cursor-pointer ${
+                    showTerminal
+                      ? 'bg-slate-900 text-emerald-400 border-slate-800'
+                      : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
+                  }`}
+                  title="Bật/Tắt xem console log trực tiếp"
                 >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Thử lại</span>
+                  <Terminal className="w-3 h-3 text-cyan-500" />
+                  <span>{showTerminal ? 'Ẩn Console' : 'Xem Live Logs'}</span>
                 </button>
-              )}
+              </div>
             </div>
             <p className="text-xs mt-1 leading-relaxed opacity-90 font-medium">
               {liveMessage}
@@ -633,6 +762,70 @@ export default function PipelineProgressTracker({
           </div>
         )}
       </div>
+
+      {/* Real-time Terminal Log Console Drawer */}
+      {showTerminal && (
+        <div className="border-t border-slate-200 bg-slate-950 p-4 font-mono text-xs text-slate-300">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-[11px]">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-bold text-slate-200">CONSOLE TRỰC TIẾP (LIVE EXECUTION LOGS)</span>
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>TRỰC TIẾP</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+              <span>Trạng thái: <strong className="text-indigo-400">{project.status}</strong></span>
+              <span>•</span>
+              <span>Tiến độ: <strong className="text-emerald-400">{project.progress_percentage}%</strong></span>
+            </div>
+          </div>
+
+          <div className="mt-2.5 space-y-1.5 max-h-52 overflow-y-auto select-text font-mono text-[11px] leading-relaxed">
+            {allLogs.map((log, index) => (
+              <div key={index} className="flex items-start gap-2">
+                <span className="text-slate-500 shrink-0 select-none">[{log.time}]</span>
+                <span className={`shrink-0 font-bold ${
+                  log.level === 'error' ? 'text-rose-400' :
+                  log.level === 'warn' ? 'text-amber-400' :
+                  log.level === 'success' ? 'text-emerald-400' :
+                  'text-cyan-400'
+                }`}>
+                  {log.level === 'error' ? '✖ [ERROR]' :
+                   log.level === 'warn' ? '⚠ [WARN]' :
+                   log.level === 'success' ? '✓ [DONE]' :
+                   '▶ [SYS]'}
+                </span>
+                <span className={`${
+                  log.level === 'error' ? 'text-rose-300' :
+                  log.level === 'warn' ? 'text-amber-200' :
+                  log.level === 'success' ? 'text-emerald-200' :
+                  'text-slate-300'
+                }`}>
+                  {log.text}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {isProcessing && (
+            <div className="mt-3 pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span className="flex items-center gap-1.5 text-amber-300/90 text-[11px]">
+                <span>💡</span>
+                <span>Nếu server từng bị tắt giữa chừng, các file audio đã tạo vẫn được lưu trên đĩa. Nhấn <strong>"Tiếp tục chạy"</strong> để làm tiếp câu còn lại.</span>
+              </span>
+              <button
+                onClick={handleResume}
+                disabled={isActionLoading}
+                className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition-colors shrink-0"
+              >
+                Tiếp tục từ điểm dừng
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

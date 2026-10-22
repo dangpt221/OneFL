@@ -1,8 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
+from app.security import AccessMiddleware, project_access, router as auth_router, credentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
+from app.services.private_media import PrivateMediaFiles
 import sys
 import asyncio
 
@@ -38,12 +42,21 @@ logger = logging.getLogger("onefl")
 async def lifespan(app: FastAPI):
     logger.info("Initializing OneFl Database and System Directories...")
     settings.ensure_directories()
+    if settings.ENV == 'production' and not credentials():
+        raise RuntimeError('Production requires API_ACCESS_TOKEN or AUTH_USERS')
+    if any(len(token) < 24 for token in credentials().values()):
+        raise RuntimeError('Access tokens must contain at least 24 characters')
+    if settings.STORAGE_DRIVER != 'local':
+        raise RuntimeError('Only local storage is implemented; use a mounted persistent volume')
     await init_db()
-    from app.services.db_migrator import run_migrations
-    run_migrations()
+    from app.services.job_service import job_service
+    await job_service.start()
     logger.info("OneFl Backend initialized successfully.")
-    yield
-    logger.info("OneFl Backend shutting down...")
+    try:
+        yield
+    finally:
+        await job_service.stop()
+        logger.info("OneFl Backend shutting down...")
 
 
 app = FastAPI(
@@ -56,7 +69,7 @@ app = FastAPI(
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[origin for origin in settings.CORS_ORIGINS if origin != "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,18 +78,37 @@ app.add_middleware(
 # Mount static files for media playback (data/ directory)
 data_dir = settings.ROOT_DIR / "data"
 data_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static/data", StaticFiles(directory=str(data_dir)), name="static_data")
+# Media roots may be configured outside the source tree.
+app.mount('/static/data/outputs', PrivateMediaFiles(directory=str(settings.OUTPUT_DIR)), name='outputs')
+app.mount('/static/data/uploads', PrivateMediaFiles(directory=str(settings.UPLOAD_DIR)), name='uploads')
+app.add_middleware(AccessMiddleware)
+app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
+
+@app.exception_handler(ValueError)
+async def invalid_input(request: Request, error: ValueError):
+    return JSONResponse({'detail': str(error)}, status_code=422)
+
+@app.exception_handler(RuntimeError)
+async def processing_error(request: Request, error: RuntimeError):
+    logger.error('Request failed: %s', type(error).__name__, exc_info=error)
+    return JSONResponse({'detail': 'Processing failed; see server logs or project status'}, status_code=502)
+
+
+@app.exception_handler(IntegrityError)
+async def conflicting_data(request: Request, error: IntegrityError):
+    logger.warning('Database rejected a conflicting write on %s', request.url.path)
+    return JSONResponse({'detail': 'Data conflict; refresh and check duplicate IDs or invalid values'}, status_code=409)
 
 # Register V1 API Routes
-app.include_router(projects_router, prefix=settings.API_V1_PREFIX)
-app.include_router(subtitles_router, prefix=settings.API_V1_PREFIX)
-app.include_router(speakers_router, prefix=settings.API_V1_PREFIX)
-app.include_router(glossary_router, prefix=settings.API_V1_PREFIX)
-app.include_router(pipeline_router, prefix=settings.API_V1_PREFIX)
-app.include_router(tts_router, prefix=settings.API_V1_PREFIX)
-app.include_router(settings_router, prefix=settings.API_V1_PREFIX)
+app.include_router(projects_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(subtitles_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(speakers_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(glossary_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(pipeline_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(tts_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
+app.include_router(settings_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
 app.include_router(ws_router, prefix=settings.API_V1_PREFIX)
-app.include_router(agent_router, prefix=settings.API_V1_PREFIX)
+app.include_router(agent_router, prefix=settings.API_V1_PREFIX, dependencies=[Depends(project_access)])
 
 
 
@@ -93,4 +125,14 @@ async def root():
 @app.get("/health")
 @app.get(f"{settings.API_V1_PREFIX}/health")
 async def health():
-    return {"status": "healthy"}
+    from sqlalchemy import text
+    from app.database import get_async_session
+    try:
+        async with get_async_session() as db:
+            await db.execute(text('SELECT 1'))
+        if not settings.OUTPUT_DIR.is_dir() or not settings.TEMP_SCRATCH_DIR.is_dir():
+            raise RuntimeError('Storage unavailable')
+    except Exception:
+        logger.exception('Readiness probe failed')
+        return JSONResponse({'status': 'unhealthy'}, status_code=503)
+    return {'status': 'healthy', 'database': 'ready', 'storage': 'ready'}

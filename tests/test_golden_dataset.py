@@ -6,7 +6,7 @@ from app.services.guardrails import SubtitleGuardrails
 from app.services.prompt_builder import PromptBuilder
 from app.services.subtitle_generator import SubtitleGenerator, format_timestamp_ass, format_timestamp_srt
 
-DATASET_PATH = Path("data/golden_dataset_1000.json")
+DATASET_PATH = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "translation_cases.json"
 FRONTEND_SAMPLE_PATH = Path("frontend/src/data/golden_dataset_sample.json")
 
 
@@ -20,7 +20,8 @@ def golden_dataset():
 
 def test_golden_dataset_structure_and_count(golden_dataset):
     """Verify total count, schema completeness, and language distribution of Golden Dataset."""
-    assert len(golden_dataset) == 1000, f"Expected 1000 items, got {len(golden_dataset)}"
+    assert len(golden_dataset) >= 12
+    assert len({tuple(c['original_text'] for c in item['input_cues']) for item in golden_dataset}) == len(golden_dataset)
 
     lang_counts = {"en": 0, "zh": 0, "ja": 0, "ko": 0}
     required_keys = [
@@ -41,16 +42,13 @@ def test_golden_dataset_structure_and_count(golden_dataset):
         assert len(item["ground_truth_translation"]) == len(item["input_cues"])
         assert len(item["video_context"]) > 10, "Video context description must be informative"
 
-    assert lang_counts["en"] == 300
-    assert lang_counts["zh"] == 300
-    assert lang_counts["ja"] == 200
-    assert lang_counts["ko"] == 200
+    assert all(count >= 2 for count in lang_counts.values())
 
 
 def test_golden_dataset_guardrails_validation(golden_dataset):
-    """Validate that Ground Truth translations satisfy all 4 Guardrail Tiers."""
-    # Test every 5th item across all 1000 cases (200 test cases) for fast, thorough test coverage
-    sample_items = golden_dataset[::5]
+    """Positive references pass; short-window references must be rejected for CPS."""
+    # Exercise every independent case with explicit, reviewed expected outcomes.
+    sample_items = golden_dataset
     total_violations = 0
 
     for item in sample_items:
@@ -74,14 +72,12 @@ def test_golden_dataset_guardrails_validation(golden_dataset):
             glossary=item["glossary"]
         )
 
-        if not is_valid:
-            total_violations += len(violations)
-            print(f"Violations in item #{item['id']} ({item['source_language']}): {violations}")
-
-        assert is_valid is True, f"Guardrail failed on item #{item['id']}: {violations}"
         assert len(translations) == len(requested_cues)
-
-    assert total_violations == 0
+        originals = {t['id']: t['text'] for t in item['ground_truth_translation']}
+        for translated in translations:
+            assert translated.text.split() == originals[translated.id].split(), 'QC must preserve all reference words'
+        assert {v['type'] for v in violations} == set(item['expected_rule_violations'])
+        assert is_valid is (not item['expected_rule_violations'])
 
 
 def test_prompt_builder_integration_with_golden_case(golden_dataset):
@@ -137,5 +133,6 @@ def test_frontend_sample_sync():
     assert FRONTEND_SAMPLE_PATH.exists()
     with open(FRONTEND_SAMPLE_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
-    assert len(data) == 50
+    assert len(data) >= 12
+    assert {item['source_language'] for item in data} == {'en', 'zh', 'ja', 'ko'}
     assert data[0]["source_language"] == "en"

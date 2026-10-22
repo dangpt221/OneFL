@@ -1,3 +1,4 @@
+from app.services.project_changes import commit_project_changes
 import csv
 import io
 import json
@@ -5,7 +6,7 @@ import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from app.database import get_db
 from app.models.glossary import GlossaryTerm
@@ -76,7 +77,8 @@ async def apply_glossary_preset(
                 case_sensitive="false"
             ))
 
-    await db.commit()
+    await db.flush()
+    await commit_project_changes(db, project_id, invalidate_audio=False)
     return await list_glossary_terms(project_id, db=db)
 
 
@@ -141,7 +143,7 @@ async def import_glossary(
     if payload.override_existing:
         await db.execute(delete(GlossaryTerm).where(GlossaryTerm.project_id == project_id))
 
-    for t in payload.terms:
+    for t in {item.source_term: item for item in payload.terms}.values():
         existing = (await db.execute(
             select(GlossaryTerm).where(
                 GlossaryTerm.project_id == project_id,
@@ -166,7 +168,8 @@ async def import_glossary(
                 case_sensitive=t.case_sensitive or "false"
             ))
 
-    await db.commit()
+    await db.flush()
+    await commit_project_changes(db, project_id, invalidate_audio=False)
     return await list_glossary_terms(project_id, db=db)
 
 
@@ -219,7 +222,8 @@ async def add_glossary_term(
         existing.context_note = data.context_note
         existing.priority = data.priority or "normal"
         existing.case_sensitive = data.case_sensitive or "false"
-        await db.commit()
+        await db.flush()
+        await commit_project_changes(db, project_id, invalidate_audio=False)
         await db.refresh(existing)
         return existing
 
@@ -233,7 +237,8 @@ async def add_glossary_term(
         case_sensitive=data.case_sensitive or "false"
     )
     db.add(term)
-    await db.commit()
+    await db.flush()
+    await commit_project_changes(db, project_id, invalidate_audio=False)
     await db.refresh(term)
     return term
 
@@ -278,7 +283,8 @@ async def update_glossary_term(
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(term, k, v)
 
-    await db.commit()
+    await db.flush()
+    await commit_project_changes(db, project_id, invalidate_audio=False)
     await db.refresh(term)
     return term
 
@@ -301,7 +307,8 @@ async def delete_glossary_term(
         raise HTTPException(status_code=404, detail="Glossary term not found")
 
     await db.delete(term)
-    await db.commit()
+    await db.flush()
+    await commit_project_changes(db, project_id, invalidate_audio=False)
     return {"success": True, "message": "Term deleted"}
 
 
@@ -320,10 +327,14 @@ async def auto_extract_glossary(
         raise HTTPException(status_code=400, detail="No cues found to extract terminology from")
 
     sample_size = min(60, total_cues)
-    cues_res = await db.execute(
-        select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index).limit(sample_size)
-    )
-    cues = cues_res.scalars().all()
+    # Stratified windows retain dialogue from the beginning, middle and end
+    # while fetching only the bounded sample, not the full transcript.
+    positions = sorted({0, max(0, total_cues // 2 - 10), max(0, total_cues - 20)})
+    sampled = {}
+    for offset in positions:
+        rows = await db.execute(select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index).offset(offset).limit(20))
+        sampled.update({cue.id: cue for cue in rows.scalars()})
+    cues = sorted(sampled.values(), key=lambda cue: cue.cue_index)
 
     sample_texts = [f"[{c.speaker_tag}]: {c.original_text}" for c in cues if c.original_text]
     system_prompt = """Bạn là Chuyên gia Cao Cấp về Biên Dịch và Quản Lý Thuật Ngữ Điện Ảnh (Studio Terminology Specialist).
@@ -350,7 +361,7 @@ BẮT BUỘC PHÂN LOẠI VÀO CÁC DANH MỤC SAU:
   ]
 }
 """
-    user_prompt = "Kịch bản mẫu:\n" + "\n".join(sample_texts[:40])
+    user_prompt = "Kịch bản mẫu:\n" + "\n".join(sample_texts[:60])
     try:
         raw_res = await llm_router.generate_completion(system_prompt, user_prompt, temperature=0.2)
         cleaned = raw_res.strip()
@@ -364,7 +375,7 @@ BẮT BUỘC PHÂN LOẠI VÀO CÁC DANH MỤC SAU:
         extracted = parsed.get("terms", [])
         
         added_terms = []
-        for item in extracted:
+        for item in {item.get('source'): item for item in extracted if isinstance(item, dict)}.values():
             src = item.get("source")
             tgt = item.get("target")
             if src and tgt:
@@ -385,10 +396,12 @@ BẮT BUỘC PHÂN LOẠI VÀO CÁC DANH MỤC SAU:
                     db.add(new_term)
                     added_terms.append(new_term)
         
-        await db.commit()
+        await db.flush()
+        await commit_project_changes(db, project_id, invalidate_audio=False)
         for t in added_terms:
             await db.refresh(t)
         return [GlossaryTermResponse.model_validate(t) for t in added_terms]
     except Exception as e:
         logger.warning(f"Auto-extract glossary error: {e}")
-        return []
+        await db.rollback()
+        raise

@@ -1,9 +1,10 @@
 import logging
+import asyncio
 from typing import List, Optional
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, delete
+from sqlalchemy import select, func, desc, delete, update
 
 from app.database import get_db, get_async_session
 from app.models.project import Project, VideoChunk
@@ -15,6 +16,11 @@ from app.services.storage_service import storage_service
 from app.services.workflow_engine import workflow_engine
 from app.services.video_downloader import video_downloader
 from app.services.ws_manager import ws_manager
+from app.services.job_service import job_service
+from app.security import current_user
+from app.services.artifact_service import invalidate_artifacts
+from app.services.media_process import probe_media
+from app.models.speaker import RelationshipMatrix
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -43,7 +49,9 @@ async def list_projects(
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieve all video translation projects with optional filtering."""
-    stmt = select(Project).order_by(desc(Project.created_at))
+    if skip < 0 or not 1 <= limit <= 100:
+        raise HTTPException(422, 'Invalid pagination')
+    stmt = select(Project).where(Project.user_id == current_user.get()).order_by(desc(Project.created_at))
     if status:
         stmt = stmt.where(Project.status == status)
     if search:
@@ -53,7 +61,7 @@ async def list_projects(
     res = await db.execute(stmt)
     projects = res.scalars().all()
 
-    total_stmt = select(func.count(Project.id))
+    total_stmt = select(func.count(Project.id)).where(Project.user_id == current_user.get())
     if status:
         total_stmt = total_stmt.where(Project.status == status)
     if search:
@@ -61,16 +69,15 @@ async def list_projects(
     total_res = await db.execute(total_stmt)
     total = total_res.scalar() or 0
 
+    ids = [p.id for p in projects]
+    counts = []
+    for model in (SubtitleCue, SpeakerProfile, GlossaryTerm):
+        rows = await db.execute(select(model.project_id, func.count(model.id)).where(model.project_id.in_(ids)).group_by(model.project_id))
+        counts.append(dict(rows.all()))
     items = []
     for p in projects:
-        c_count_res = await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == p.id))
-        s_count_res = await db.execute(select(func.count(SpeakerProfile.id)).where(SpeakerProfile.project_id == p.id))
-        g_count_res = await db.execute(select(func.count(GlossaryTerm.id)).where(GlossaryTerm.project_id == p.id))
-
         resp = ProjectResponse.model_validate(p)
-        resp.cue_count = c_count_res.scalar() or 0
-        resp.speaker_count = s_count_res.scalar() or 0
-        resp.glossary_count = g_count_res.scalar() or 0
+        resp.cue_count, resp.speaker_count, resp.glossary_count = (mapping.get(p.id, 0) for mapping in counts)
         items.append(resp)
 
     return ProjectListResponse(total=total, items=items)
@@ -83,6 +90,7 @@ async def create_project(
 ):
     """Create a new project container."""
     project = Project(
+        user_id=current_user.get(),
         title=data.title,
         description=data.description,
         source_language=data.source_language,
@@ -117,6 +125,7 @@ async def create_project_from_url(
     """
     initial_title = data.title or "Bilibili Video"
     project = Project(
+        user_id=current_user.get(),
         title=initial_title,
         original_video_url=data.url,
         source_language=data.source_language,
@@ -130,96 +139,7 @@ async def create_project_from_url(
     await db.commit()
     await db.refresh(project)
 
-    async def download_and_run_pipeline(project_id: str, url: str, auto_start: bool):
-        async with get_async_session() as bg_db:
-            res = await bg_db.execute(select(Project).where(Project.id == project_id))
-            p = res.scalar_one_or_none()
-            if not p:
-                return
-
-            try:
-                await ws_manager.broadcast_to_project(project_id, {
-                    "event": "stage_changed",
-                    "stage": "DOWNLOADING_URL",
-                    "progress": 5,
-                    "message": "Đang kết nối và tải video từ Bilibili..."
-                })
-
-                last_db_time = 0.0
-                last_db_pct = -1
-
-                async def dl_progress(info: dict):
-                    nonlocal last_db_time, last_db_pct
-                    pct = info["pct"]
-                    int_pct = min(100, max(0, int(pct)))
-                    speed = info.get("speed") or ""
-                    eta = info.get("eta") or ""
-
-                    msg_parts = [f"Đang tải video ({pct}%)"]
-                    if speed:
-                        msg_parts.append(f"Tốc độ: {speed}")
-                    if eta:
-                        msg_parts.append(f"Còn: {eta}")
-                    full_msg = " • ".join(msg_parts)
-
-                    # 1. Real-time WebSocket broadcast
-                    await ws_manager.broadcast_to_project(project_id, {
-                        "event": "progress_update",
-                        "stage": "DOWNLOADING_URL",
-                        "progress": int_pct,
-                        "percentage": int_pct,
-                        "message": full_msg,
-                        "speed": speed,
-                        "eta": eta,
-                    })
-
-                    # 2. Update DB throttled every 1.5s or on each 1% change
-                    now = asyncio.get_event_loop().time()
-                    if (now - last_db_time >= 1.5) or (int_pct - last_db_pct >= 1) or int_pct >= 99:
-                        last_db_time = now
-                        last_db_pct = int_pct
-                        p.progress_percentage = int_pct
-                        p.current_stage = "DOWNLOADING_URL"
-                        p.error_message = full_msg
-                        await bg_db.commit()
-
-                upload_dir = storage_service.get_project_dir(project_id)
-                dl_result = await video_downloader.download_video(url, upload_dir, dl_progress)
-
-                p.local_video_path = str(dl_result["file_path"])
-                p.original_video_url = storage_service.get_relative_url(dl_result["file_path"])
-                if dl_result.get("title") and (p.title == "Bilibili Video" or not p.title):
-                    p.title = dl_result["title"]
-                if dl_result.get("duration"):
-                    p.video_duration_seconds = dl_result["duration"]
-
-                p.current_stage = "INGESTED"
-                p.progress_percentage = 100
-                p.error_message = None
-                await bg_db.commit()
-
-                await ws_manager.broadcast_to_project(project_id, {
-                    "event": "stage_changed",
-                    "stage": "INGESTED",
-                    "progress": 100,
-                    "message": "Tải video Bilibili hoàn tất! Bắt đầu trích xuất âm thanh và nhận diện lời thoại..."
-                })
-
-                if auto_start:
-                    await workflow_engine.run_pipeline(bg_db, project_id)
-
-            except Exception as e:
-                logger.error(f"Download & pipeline error for {project_id}: {e}", exc_info=True)
-                p.status = "FAILED"
-                p.error_message = f"Lỗi tải video Bilibili: {str(e)}"
-                await bg_db.commit()
-                await ws_manager.broadcast_to_project(project_id, {
-                    "event": "pipeline_failed",
-                    "status": "FAILED",
-                    "error": str(e)
-                })
-
-    background_tasks.add_task(download_and_run_pipeline, project.id, data.url, data.auto_start_pipeline)
+    await job_service.enqueue(db, project.id, 'DOWNLOAD', {'url': data.url, 'auto_start': data.auto_start_pipeline})
     resp = ProjectResponse.model_validate(project)
     resp.cue_count = 0
     resp.speaker_count = 0
@@ -236,73 +156,88 @@ async def upload_video_and_start(
     db: AsyncSession = Depends(get_db)
 ):
     """Uploads video file directly to the project and optionally triggers the pipeline."""
-    res = await db.execute(select(Project).where(Project.id == project_id))
-    project = res.scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
+    await require_idle_project(db, project_id)
     saved_path = await storage_service.save_upload_file_stream(project_id, file)
-
-    project.local_video_path = str(saved_path)
-    project.original_video_url = storage_service.get_relative_url(saved_path)
-    project.status = "INGESTING" if auto_start_pipeline else "CREATED"
-    await db.commit()
-    await db.refresh(project)
-
-    if auto_start_pipeline:
-        async def run_bg_pipeline(pid: str):
-            async with get_async_session() as bg_db:
-                await workflow_engine.run_pipeline(bg_db, pid)
-
-        background_tasks.add_task(run_bg_pipeline, project_id)
-
-    resp = ProjectResponse.model_validate(project)
-    resp.cue_count = (await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id))).scalar() or 0
-    resp.speaker_count = (await db.execute(select(func.count(SpeakerProfile.id)).where(SpeakerProfile.project_id == project_id))).scalar() or 0
-    resp.glossary_count = (await db.execute(select(func.count(GlossaryTerm.id)).where(GlossaryTerm.project_id == project_id))).scalar() or 0
-    return resp
+    return await replace_project_source(db, project_id, saved_path, auto_start_pipeline)
 
 
-@router.post("/{project_id}/upload-chunk", response_model=ProjectResponse)
-async def upload_video_chunk(
-    project_id: str,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    filename: str = Form(...),
-    chunk_index: int = Form(...),
-    total_chunks: int = Form(...),
-    offset: int = Form(...),
-    auto_start_pipeline: bool = Form(True),
-    db: AsyncSession = Depends(get_db)
-):
-    """Uploads a specific chunk of a video file for large file client-side chunking."""
-    res = await db.execute(select(Project).where(Project.id == project_id))
-    project = res.scalar_one_or_none()
+class UploadSessionRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)
+    total_chunks: int = Field(gt=0, le=100000)
+
+
+async def require_idle_project(db, project_id):
+    project = await db.get(Project, project_id, populate_existing=True)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(404, 'Project not found')
+    if project.active_job_id:
+        raise HTTPException(409, 'Cancel the active job before changing project input')
+    return project
 
-    saved_path = await storage_service.write_upload_chunk(project_id, filename, file, offset)
 
-    # Nếu là chunk cuối cùng
-    if chunk_index == total_chunks - 1:
-        project.local_video_path = str(saved_path)
-        project.original_video_url = storage_service.get_relative_url(saved_path)
-        project.status = "INGESTING" if auto_start_pipeline else "CREATED"
-        
-        if auto_start_pipeline:
-            async def run_bg_pipeline(pid: str):
-                async with get_async_session() as bg_db:
-                    await workflow_engine.run_pipeline(bg_db, pid)
-            background_tasks.add_task(run_bg_pipeline, project_id)
+@router.post('/{project_id}/uploads')
+async def begin_project_upload(project_id: str, data: UploadSessionRequest, db: AsyncSession = Depends(get_db)):
+    await require_idle_project(db, project_id)
+    return await storage_service.begin_upload(project_id, data.filename, data.size, data.total_chunks)
 
-    await db.commit()
+
+@router.get('/{project_id}/uploads/{upload_id}')
+async def get_upload_status(project_id: str, upload_id: str, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Project, project_id):
+        raise HTTPException(404, 'Project not found')
+    return await storage_service.upload_status(project_id, upload_id)
+
+
+@router.post('/{project_id}/upload-chunk')
+async def upload_video_chunk(
+    project_id: str, upload_id: str = Form(...), chunk_index: int = Form(...),
+    offset: int = Form(...), file: UploadFile = File(...), db: AsyncSession = Depends(get_db),
+):
+    await require_idle_project(db, project_id)
+    await storage_service.receive_chunk(project_id, upload_id, chunk_index, offset, file)
+    return {'success': True, 'chunk_index': chunk_index}
+
+
+@router.post('/{project_id}/uploads/{upload_id}/finalize', response_model=ProjectResponse)
+async def finalize_project_upload(project_id: str, upload_id: str, auto_start_pipeline: bool = True, db: AsyncSession = Depends(get_db)):
+    path = await storage_service.finalize_upload(project_id, upload_id)
+    return await replace_project_source(db, project_id, path, auto_start_pipeline)
+
+
+async def replace_project_source(db, project_id: str, path: Path, auto_start: bool):
+    async with storage_service._upload_lock(storage_service.get_project_dir(project_id)):
+        return await _replace_project_source_locked(db, project_id, path, auto_start)
+
+
+async def _replace_project_source_locked(db, project_id: str, path: Path, auto_start: bool):
+    project = await db.get(Project, project_id, populate_existing=True)
+    if not project:
+        raise HTTPException(404, 'Project not found')
+    # A repeated finalize must not enqueue the same input twice, even after its
+    # first pipeline has completed. An explicitly new upload gets a new ID/path.
+    if project.local_video_path == str(path):
+        return ProjectResponse.model_validate(project)
+    duration = await probe_media(path, require_video=True)
+    claim = await db.execute(update(Project).where(Project.id == project_id, Project.active_job_id.is_(None)).values(current_stage='INGESTED'))
+    if claim.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(409, 'Cancel the active job before replacing project input')
     await db.refresh(project)
-
-    resp = ProjectResponse.model_validate(project)
-    resp.cue_count = (await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id))).scalar() or 0
-    resp.speaker_count = (await db.execute(select(func.count(SpeakerProfile.id)).where(SpeakerProfile.project_id == project_id))).scalar() or 0
-    resp.glossary_count = (await db.execute(select(func.count(GlossaryTerm.id)).where(GlossaryTerm.project_id == project_id))).scalar() or 0
-    return resp
+    await db.execute(delete(SubtitleCue).where(SubtitleCue.project_id == project_id))
+    await db.execute(delete(RelationshipMatrix).where(RelationshipMatrix.project_id == project_id))
+    await db.execute(delete(SpeakerProfile).where(SpeakerProfile.project_id == project_id))
+    invalidate_artifacts(project, audio=True)
+    project.extracted_audio_path = None
+    project.subtitles_ass_path = project.subtitles_srt_path = None
+    project.local_video_path, project.original_video_url = str(path), storage_service.get_relative_url(path)
+    project.video_duration_seconds = duration
+    project.status, project.current_stage, project.progress_percentage = 'CREATED', 'INGESTED', 0
+    await db.commit()
+    if auto_start:
+        await job_service.enqueue(db, project_id, 'PIPELINE', {})
+    await db.refresh(project)
+    return ProjectResponse.model_validate(project)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -340,6 +275,8 @@ async def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     update_dict = data.model_dump(exclude_unset=True)
+    if any(key in update_dict and update_dict[key] != getattr(project, key) for key in ('source_language', 'target_language', 'settings_override', 'default_voice')):
+        invalidate_artifacts(project, audio=True)
     for k, v in update_dict.items():
         setattr(project, k, v)
 
@@ -364,8 +301,11 @@ async def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    await job_service.cancel(db, project_id)
+    await db.refresh(project)
     await db.delete(project)
     await db.commit()
+    await storage_service.delete_project_files(project_id)
     return {"success": True, "message": f"Project {project_id} deleted"}
 
 
@@ -382,24 +322,8 @@ async def trigger_project_dubbing(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    voice = project.default_voice or "nova"
-    background_tasks.add_task(
-        _run_dubbing_task,
-        project_id=project_id,
-        voice=voice,
-        model="tts-1",
-        speed=1.0,
-        ducking_volume=0.18,
-        mix_original=True,
-        speaker_voice_map={}
-    )
-
-    return {
-        "success": True,
-        "message": f"AI Dubbing started with voice '{voice}'",
-        "project_id": project_id,
-        "status": "DUBBING"
-    }
+    from app.api.v1.tts import start_project_dubbing
+    return await start_project_dubbing(project_id, background_tasks, ProjectDubRequest(voice=project.default_voice or 'vi-VN-HoaiMyNeural'), db)
 
 
 @router.get("/{project_id}/dub")
@@ -422,3 +346,71 @@ async def get_project_dub_status(
         "dubbed_audio_url": project.dubbed_audio_url,
         "dubbed_video_url": project.dubbed_video_url
     }
+
+
+class ResetStatusRequest(BaseModel):
+    target_status: str = Field('WAITING_REVIEW', pattern='^(CREATED|WAITING_REVIEW)$')
+
+
+@router.post("/{project_id}/reset-status")
+async def reset_project_status(
+    project_id: str,
+    data: "ResetStatusRequest",
+    db: AsyncSession = Depends(get_db)
+):
+    """Resets stuck/interrupted project status back to WAITING_REVIEW."""
+    res = await db.execute(select(Project).where(Project.id == project_id))
+    project = res.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    await job_service.cancel(db, project_id)
+    await db.refresh(project)
+    target_status = data.target_status
+    project.status = target_status or "WAITING_REVIEW"
+    project.current_stage = target_status or "WAITING_REVIEW"
+    project.error_message = "Đã đặt lại trạng thái dự án. Bạn có thể tiếp tục thao tác trên Studio."
+    await db.commit()
+    await db.refresh(project)
+
+    await ws_manager.broadcast_to_project(project_id, "STATUS_UPDATE", {
+        "status": project.status,
+        "stage": project.current_stage,
+        "current_stage": project.current_stage,
+        "progress": project.progress_percentage,
+        "message": project.error_message
+    })
+
+    return {
+        "success": True,
+        "message": f"Project status reset to {project.status}",
+        "status": project.status
+    }
+
+
+@router.post("/{project_id}/resume-dubbing")
+async def resume_project_dubbing(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """Resumes interrupted dubbing using existing cached clips on disk."""
+    from app.api.v1.tts import _run_dubbing_task
+    res = await db.execute(select(Project).where(Project.id == project_id))
+    project = res.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.last_dub_config:
+        raise HTTPException(409, 'No saved dubbing configuration to resume')
+    from app.api.v1.tts import ProjectDubRequest, start_project_dubbing
+    return await start_project_dubbing(project_id, background_tasks, ProjectDubRequest(**project.last_dub_config), db)
+
+
+@router.get('/{project_id}/jobs/{job_id}')
+async def get_project_job(project_id: str, job_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.job import Job
+    job = await db.get(Job, job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(404, 'Job not found')
+    return {'id': job.id, 'status': job.status, 'error': job.error, 'kind': job.kind, 'heartbeat_at': job.heartbeat_at, 'result': job.result}

@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class SpeakerProfileCreate(BaseModel):
@@ -14,7 +14,7 @@ class SpeakerProfileCreate(BaseModel):
     role: Optional[str] = None
     tone: Optional[str] = None
     tts_voice: Optional[str] = "vi-VN-HoaiMyNeural"
-    tts_speed: Optional[float] = 1.0
+    tts_speed: Optional[float] = Field(1.0, ge=0.5, le=2.0, allow_inf_nan=False)
     notes: Optional[str] = None
 
 
@@ -28,7 +28,7 @@ class SpeakerProfileUpdate(BaseModel):
     role: Optional[str] = None
     tone: Optional[str] = None
     tts_voice: Optional[str] = None
-    tts_speed: Optional[float] = None
+    tts_speed: Optional[float] = Field(None, ge=0.5, le=2.0, allow_inf_nan=False)
     notes: Optional[str] = None
 
 
@@ -51,8 +51,7 @@ class SpeakerProfileResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RelationshipMatrixCreate(BaseModel):
@@ -83,8 +82,7 @@ class RelationshipMatrixResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SpeakerMatrixFullResponse(BaseModel):

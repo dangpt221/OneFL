@@ -1,3 +1,4 @@
+from app.services.project_changes import commit_project_changes
 import csv
 import io
 import json
@@ -81,7 +82,7 @@ async def create_speaker_profile(
         existing.tts_voice = data.tts_voice or existing.tts_voice
         existing.tts_speed = data.tts_speed or existing.tts_speed
         existing.notes = data.notes or existing.notes
-        await db.commit()
+        await commit_project_changes(db, project_id, invalidate_audio=True)
         await db.refresh(existing)
         return existing
 
@@ -101,7 +102,7 @@ async def create_speaker_profile(
         notes=data.notes
     )
     db.add(spk)
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     await db.refresh(spk)
     return spk
 
@@ -153,7 +154,7 @@ async def apply_speaker_preset(
         else:
             db.add(RelationshipMatrix(project_id=project_id, **rel_data))
 
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     return await get_speaker_matrix(project_id, db)
 
 
@@ -239,7 +240,7 @@ async def import_speakers(
         await db.execute(delete(RelationshipMatrix).where(RelationshipMatrix.project_id == project_id))
         await db.execute(delete(SpeakerProfile).where(SpeakerProfile.project_id == project_id))
 
-    for spk_data in payload.speakers or []:
+    for spk_data in {item.speaker_tag: item for item in payload.speakers or []}.values():
         existing = (await db.execute(
             select(SpeakerProfile).where(
                 SpeakerProfile.project_id == project_id,
@@ -253,7 +254,7 @@ async def import_speakers(
         else:
             db.add(SpeakerProfile(project_id=project_id, **spk_data.model_dump()))
 
-    for rel_data in payload.relationships or []:
+    for rel_data in {(item.source_speaker, item.target_speaker): item for item in payload.relationships or []}.values():
         existing_rel = (await db.execute(
             select(RelationshipMatrix).where(
                 RelationshipMatrix.project_id == project_id,
@@ -268,7 +269,7 @@ async def import_speakers(
         else:
             db.add(RelationshipMatrix(project_id=project_id, **rel_data.model_dump()))
 
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     return await get_speaker_matrix(project_id, db)
 
 
@@ -315,7 +316,7 @@ async def upsert_relationship(
         rel.relationship_type = data.relationship_type
         rel.honorific_notes = data.honorific_notes
 
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     await db.refresh(rel)
     return rel
 
@@ -338,7 +339,7 @@ async def delete_relationship(
         raise HTTPException(status_code=404, detail="Relationship not found")
 
     await db.delete(rel)
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     return {"success": True, "message": "Relationship pair deleted"}
 
 
@@ -383,7 +384,7 @@ async def update_speaker_profile(
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(spk, k, v)
 
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     await db.refresh(spk)
     return spk
 
@@ -414,5 +415,5 @@ async def delete_speaker_profile(
     )
 
     await db.delete(spk)
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     return {"success": True, "message": f"Speaker {speaker_tag} and its relationships deleted"}

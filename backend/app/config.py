@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, model_validator
 
 # Base Directory of Workspace (OneFl)
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = Path(os.environ.get('ONEFL_ROOT_DIR', Path(__file__).resolve().parent.parent.parent)).resolve()
 ENV_PATH = ROOT_DIR / ".env"
 
 
@@ -21,12 +21,22 @@ class Settings(BaseSettings):
     ENV: str = "development"
     DEBUG: bool = True
     APP_NAME: str = "OneFl Video Translator"
-    APP_HOST: str = "0.0.0.0"
+    APP_HOST: str = "127.0.0.1"
     APP_PORT: int = 8000
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     SECRET_KEY: str = "onefl_super_secret_jwt_and_session_key_2026"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    API_ACCESS_TOKEN: Optional[str] = None
+    AUTH_USERS: dict[str, str] = {}  # user ID -> access token; optional multi-user setup
+    JOB_POLL_SECONDS: float = 1.0
+    JOB_LEASE_SECONDS: int = 45
+    MAX_QUEUED_JOBS: int = 100
+    MAX_UPLOAD_BYTES: int = 60 * 1024**3
+    MAX_UPLOAD_CHUNK_BYTES: int = 16 * 1024**2
+    CACHE_RETENTION_DAYS: int = 14
+    MAX_CONCURRENT_GPU_BURN_WORKERS: int = 2
+    ALLOWED_VIDEO_HOSTS: List[str] = ['bilibili.com', 'b23.tv', 'youtube.com', 'youtu.be', 'douyin.com', 'tiktok.com', 'kuaishou.com']
 
     # 2. Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./onefl_videotrans.db"
@@ -44,6 +54,10 @@ class Settings(BaseSettings):
     
     @model_validator(mode="after")
     def resolve_paths(self):
+        import re
+        for user, token in self.AUTH_USERS.items():
+            if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', user) or len(token) < 24:
+                raise ValueError('AUTH_USERS requires safe user IDs and tokens of at least 24 characters')
         if not self.UPLOAD_DIR.is_absolute():
             self.UPLOAD_DIR = (self.ROOT_DIR / self.UPLOAD_DIR).resolve()
         if not self.OUTPUT_DIR.is_absolute():
@@ -66,9 +80,11 @@ class Settings(BaseSettings):
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_BEAM_SIZE: int = 5
     ASR_MAX_DURATION_SECONDS: Optional[int] = None
-    ENABLE_SPEAKER_DIARIZATION: bool = True
+    ENABLE_SPEAKER_DIARIZATION: bool = False
     ENABLE_SPEAKER_PROFILER: bool = True
+    ENABLE_VISUAL_CONTEXT: bool = False
     HF_TOKEN: Optional[str] = None
+    DIARIZATION_DEVICE: str = 'cpu'
 
     # 5. LLM Translation & Multi-Provider Router
     TRANSLATION_PRIMARY_PROVIDER: str = "gemini"  # gemini | openai | anthropic
@@ -118,7 +134,6 @@ class Settings(BaseSettings):
     ))
     FFPROBE_PATH: str = "ffprobe"
     VIDEO_CHUNK_DURATION_SECONDS: int = 1200
-    MAX_CONCURRENT_GPU_BURN_WORKERS: int = 8
     NVENC_GPU_DEVICE_ID: int = 0
     NVENC_PRESET: str = "p4"
     NVENC_CQ_LEVEL: int = 23
@@ -130,6 +145,7 @@ class Settings(BaseSettings):
     DEFAULT_TTS_SPEED: float = 1.0
     DEFAULT_DUCKING_VOLUME: float = 0.18  # 18% background music volume
     DEFAULT_TTS_PROVIDER: str = "edge-tts"
+    TTS_MAX_CONCURRENCY: int = Field(8, ge=1, le=32)
 
     SUB_FONT_NAME: str = "Roboto"
     SUB_FONT_SIZE: int = 22

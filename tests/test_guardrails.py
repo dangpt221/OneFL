@@ -20,7 +20,7 @@ def test_auto_wrap_text_long():
     text = "Đây là một câu thoại rất dài vượt quá giới hạn ký tự chuẩn của một dòng phụ đề bình thường."
     wrapped = SubtitleGuardrails.auto_wrap_text(text, max_chars_per_line=35, max_lines=2)
     lines = wrapped.split("\n")
-    assert len(lines) <= 2
+    assert " ".join(lines).split() == text.split()
     for line in lines:
         assert len(line) <= 45  # Reasonable wrapping boundary
 

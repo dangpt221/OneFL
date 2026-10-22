@@ -18,7 +18,7 @@ class SpeakerProfiler:
         """Analyzes speaker dialogue patterns and produces SpeakerProfiles + RelationshipMatrix."""
         
         # Extract unique speaker tags
-        unique_speakers = list(set(cue.get("speaker", "SPEAKER_00") for cue in cues_sample))
+        unique_speakers = sorted(set(cue.get("speaker", "SPEAKER_00") for cue in cues_sample))
         if not unique_speakers:
             unique_speakers = ["SPEAKER_00"]
 
@@ -80,7 +80,7 @@ Nhiệm vụ: Đọc đoạn hội thoại mẫu được cung cấp và suy lu�
 """
                 sample_dialogues = [
                     f"{c.get('speaker', 'SPEAKER_00')}: {c.get('text', '')}"
-                    for c in cues_sample[:30]
+                    for c in cues_sample[::max(1, len(cues_sample) // 30)][:30]
                 ]
                 user_prompt = f"Ngôn ngữ video: {source_lang}\nĐoạn hội thoại mẫu:\n" + "\n".join(sample_dialogues)
 
@@ -98,6 +98,18 @@ Nhiệm vụ: Đọc đoạn hội thoại mẫu được cung cấp và suy lu�
                 parsed_speakers = parsed.get("speakers", {})
                 parsed_rels = parsed.get("relationships", [])
 
+                from app.schemas.speaker import SpeakerProfileCreate, RelationshipMatrixCreate
+                if not isinstance(parsed_speakers, dict) or set(parsed_speakers) != set(unique_speakers):
+                    raise ValueError('Profiler must return every observed speaker without invented IDs')
+                for tag, profile in parsed_speakers.items():
+                    SpeakerProfileCreate.model_validate({**profile, 'speaker_tag': tag})
+                seen = set()
+                for relationship in parsed_rels:
+                    row = RelationshipMatrixCreate.model_validate(relationship)
+                    pair = (row.source_speaker, row.target_speaker)
+                    if pair[0] not in unique_speakers or pair[1] not in unique_speakers or pair[0] == pair[1] or pair in seen:
+                        raise ValueError('Invalid profiler relationship pair')
+                    seen.add(pair)
                 # Merge with fallbacks to ensure full coverage
                 final_profiles = {}
                 for spk in unique_speakers:
@@ -117,14 +129,15 @@ Nhiệm vụ: Đọc đoạn hội thoại mẫu được cung cấp và suy lu�
 
                 return {
                     "speakers": final_profiles,
-                    "relationships": parsed_rels if parsed_rels else fallback_matrix
+                    "relationships": parsed_rels
                 }
             except Exception as e:
-                logger.warning(f"LLM Speaker Profiling failed, falling back to default matrix: {e}")
+                logger.exception("Speaker profiling failed")
+                raise RuntimeError("Speaker profiling failed; retry or disable ENABLE_SPEAKER_PROFILER explicitly") from e
 
         return {
             "speakers": fallback_profiles,
-            "relationships": fallback_matrix
+            "relationships": []
         }
 
 

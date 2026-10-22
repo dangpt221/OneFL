@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
+from app.config import settings
 
 from app.models.project import Project, VideoChunk
 from app.models.subtitle import SubtitleCue
@@ -29,9 +30,12 @@ class WorkflowEngine:
         cls,
         db: AsyncSession,
         project_id: str,
-        start_stage: Optional[str] = None
+        start_stage: Optional[str] = None,
+        force_reprocess: bool = False
     ):
         """Executes pipeline asynchronously with status updates and error handling."""
+        if start_stage not in {None, "INGESTING", "ASR_PROCESSING", "SPEAKER_PROFILING", "TRANSLATING"}:
+            raise ValueError("Invalid pipeline stage")
         # Fetch project
         result = await db.execute(select(Project).where(Project.id == project_id))
         project = result.scalar_one_or_none()
@@ -40,6 +44,10 @@ class WorkflowEngine:
             return
 
         try:
+            from app.services.artifact_service import invalidate_artifacts
+            invalidate_artifacts(project, audio=True)
+            project.status = 'PROCESSING'
+            await db.commit()
             # GIAI ĐOẠN 1: INGESTING (Audio Extraction & VAD Chunking)
             if not start_stage or start_stage == "INGESTING":
                 project.status = "PROCESSING"
@@ -54,6 +62,8 @@ class WorkflowEngine:
                 })
 
                 video_path = Path(project.local_video_path) if project.local_video_path else None
+                if not video_path or not video_path.is_file():
+                    raise ValueError("Source video is missing")
                 if video_path and video_path.exists():
                     p_dir = storage_service.get_project_dir(project_id)
                     audio_path = p_dir / "extracted_audio.wav"
@@ -66,6 +76,8 @@ class WorkflowEngine:
             if not start_stage or start_stage in ["INGESTING", "ASR_PROCESSING"]:
                 cues_exist_res = await db.execute(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id))
                 existing_cues_count = cues_exist_res.scalar() or 0
+                if existing_cues_count and start_stage == "ASR_PROCESSING" and not force_reprocess:
+                    raise ValueError("Re-running ASR requires force_reprocess=true")
 
                 if existing_cues_count > 0 and start_stage != "ASR_PROCESSING":
                     logger.info(f"Project {project_id} already has {existing_cues_count} cues extracted. Skipping re-ASR.")
@@ -100,6 +112,9 @@ class WorkflowEngine:
 
                     # Clear old cues if re-running
                     await db.execute(delete(SubtitleCue).where(SubtitleCue.project_id == project_id))
+                    if force_reprocess and start_stage == 'ASR_PROCESSING':
+                        await db.execute(delete(RelationshipMatrix).where(RelationshipMatrix.project_id == project_id))
+                        await db.execute(delete(SpeakerProfile).where(SpeakerProfile.project_id == project_id))
                     for cue in raw_cues:
                         db_cue = SubtitleCue(
                             project_id=project_id,
@@ -111,9 +126,11 @@ class WorkflowEngine:
                         )
                         db.add(db_cue)
                     
-                    # Update duration from last cue
-                    if raw_cues:
-                        project.video_duration_seconds = raw_cues[-1]["end_time"]
+                    # Keep duration from the source media, including silence.
+                    if not raw_cues:
+                        raise ValueError("No speech detected; no subtitle content was generated")
+                    if not project.video_duration_seconds:
+                        project.video_duration_seconds = await asyncio.to_thread(asr_service.get_audio_duration, Path(project.local_video_path))
                     await db.commit()
 
             # GIAI ĐOẠN 3: SPEAKER PROFILING (Character Matrix Analysis)
@@ -141,7 +158,7 @@ class WorkflowEngine:
                         for c in cues_list
                     ]
 
-                    analysis = await speaker_profiler.analyze_speakers_and_matrix(cues_data, project.source_language)
+                    analysis = await speaker_profiler.analyze_speakers_and_matrix(cues_data, project.source_language) if settings.ENABLE_SPEAKER_PROFILER else {"speakers": {}, "relationships": []}
                     
                     # Update or insert speaker profiles
                     analysis_spks = analysis.get("speakers", {})
@@ -202,6 +219,8 @@ class WorkflowEngine:
                 # Fetch all cues, speakers, relationships, glossaries
                 cues_res = await db.execute(select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index))
                 db_cues = cues_res.scalars().all()
+                if not db_cues:
+                    raise ValueError('No transcript cues available for translation')
                 cues_payload = [
                     {
                         "id": c.id,
@@ -211,7 +230,8 @@ class WorkflowEngine:
                         "original_text": c.original_text,
                         "speaker_tag": c.speaker_tag,
                         "target_speaker_tag": c.target_speaker_tag,
-                        "translated_text": c.translated_text
+                        "translated_text": c.translated_text,
+                        "is_edited": c.is_edited
                     }
                     for c in db_cues
                 ]
@@ -249,7 +269,7 @@ class WorkflowEngine:
                     {
                         "source_term": g.source_term,
                         "target_term": g.target_term,
-                        "context_note": g.context_note
+                        "priority": g.priority, "case_sensitive": g.case_sensitive, "context_note": g.context_note
                     }
                     for g in glo_res.scalars().all()
                 ]
@@ -265,6 +285,8 @@ class WorkflowEngine:
                             cue_map[c_idx].cps = t.get("cps", 0.0)
                             cue_map[c_idx].line_count = t.get("line_count", 1)
                             cue_map[c_idx].max_line_length = t.get("max_line_length", 0)
+                            cue_map[c_idx].has_guardrail_violation = t.get("has_guardrail_violation", False)
+                            cue_map[c_idx].violation_notes = t.get("violation_notes")
 
                     pct = min(80, 60 + int((done_count / total_count) * 20))
                     project.progress_percentage = pct
@@ -286,7 +308,11 @@ class WorkflowEngine:
                     speaker_profiles=speakers,
                     relationship_matrix=rels,
                     glossary=glossary,
-                    batch_callback=save_batch_progress
+                    batch_callback=save_batch_progress,
+                    force_reprocess=force_reprocess,
+                    model_override=(project.settings_override or {}).get("model_override"),
+                    video_context=(project.settings_override or {}).get("video_context"),
+                    video_path=project.local_video_path,
                 )
 
                 # Final ensure all translated cues are persisted
@@ -349,190 +375,114 @@ class WorkflowEngine:
                 )
 
         except Exception as e:
-            logger.error(f"Pipeline error for project {project_id}: {e}", exc_info=True)
-            project.status = "FAILED"
-            
-            # str(e) can be empty for built-in exceptions like NotImplementedError or ValueError()
-            err_msg = str(e)
-            if not err_msg:
-                err_msg = f"Lỗi hệ thống ({type(e).__name__})"
-                
-            project.error_message = err_msg
+            logger.exception("Pipeline failed for %s", project_id)
+            await db.rollback()
+            from sqlalchemy import update
+            await db.execute(update(Project).where(Project.id == project_id).values(status='FAILED', error_message=str(e) or type(e).__name__))
             await db.commit()
-            await ws_manager.broadcast_to_project(project_id, "PIPELINE_ERROR", {"error": err_msg})
+            await ws_manager.broadcast_to_project(project_id, 'PIPELINE_ERROR', {'status': 'FAILED', 'error': str(e) or type(e).__name__})
+            raise
 
     @classmethod
     async def burn_project_video(cls, db: AsyncSession, project_id: str):
-        """Executes subtitle burning and final lossless stitching."""
-        result = await db.execute(select(Project).where(Project.id == project_id))
-        project = result.scalar_one_or_none()
+        """Render accurate source intervals; only the coordinator writes the DB."""
+        import hashlib
+        import json
+        import math
+        import uuid
+        from app.services.media_process import probe_media, validate_duration
+        from app.services.artifact_service import invalidate_artifacts
+        from sqlalchemy import update
+        project = await db.get(Project, project_id)
         if not project:
-            return
-
+            raise ValueError('Project not found')
+        tasks = []
         try:
-            project.status = "BURNING"
-            project.current_stage = "BURNING"
-            project.progress_percentage = 85
-            project.error_message = "Đang render và gắn phụ đề cứng vào video (FFmpeg NVENC)..."
-            await db.commit()
-            await ws_manager.broadcast_to_project(project_id, "STAGE_CHANGED", {
-                "stage": "BURNING",
-                "progress": 85,
-                "message": "Đang render và gắn phụ đề cứng vào video (FFmpeg NVENC)..."
-            })
-
+            video_path = Path(project.dubbed_video_path or project.local_video_path or '')
+            duration = await probe_media(video_path, require_video=True)
+            project.video_duration_seconds = duration
+            cues = (await db.execute(select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.start_time, SubtitleCue.cue_index))).scalars().all()
+            if not cues or any(not c.translated_text for c in cues):
+                raise ValueError('All subtitle cues must be translated before burning')
+            cfg = dict(project.settings_override or {})
+            payload = [{'start_time': c.start_time, 'end_time': c.end_time, 'original_text': c.original_text,
+                        'translated_text': c.translated_text, 'speaker_tag': c.speaker_tag} for c in cues]
+            signature = hashlib.sha256(json.dumps([str(video_path.resolve()), video_path.stat().st_mtime_ns, payload, cfg], sort_keys=True).encode()).hexdigest()[:24]
             p_dir = storage_service.get_project_dir(project_id)
-            ass_path = Path(project.subtitles_ass_path) if project.subtitles_ass_path else p_dir / "subtitles.ass"
-            video_path = None
-            if project.dubbed_video_path and Path(project.dubbed_video_path).exists():
-                video_path = Path(project.dubbed_video_path)
-            elif (settings.OUTPUT_DIR / f"{project_id}_dubbed.mp4").exists():
-                video_path = settings.OUTPUT_DIR / f"{project_id}_dubbed.mp4"
-            elif project.local_video_path and Path(project.local_video_path).exists():
-                video_path = Path(project.local_video_path)
+            chunk_dir = p_dir / 'render' / signature
+            chunk_dir.mkdir(parents=True, exist_ok=True)
+            invalidate_artifacts(project)
+            project.status, project.current_stage, project.progress_percentage = 'BURNING', 'BURNING', 85
+            await db.commit()
+            chunk_duration = float(settings.VIDEO_CHUNK_DURATION_SECONDS)
+            if chunk_duration <= 0:
+                raise ValueError('VIDEO_CHUNK_DURATION_SECONDS must be positive')
+            count = math.ceil(duration / chunk_duration)
+            semaphore = asyncio.Semaphore(max(1, settings.MAX_CONCURRENT_GPU_BURN_WORKERS))
 
-            output_burned = p_dir / "output_burned.mp4"
-
-            if not video_path or not video_path.exists():
-                raise ValueError("Video nguồn không tồn tại. Vui lòng kiểm tra lại đường dẫn video.")
-
-            cues_res = await db.execute(
-                select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index)
-            )
-            db_cues = cues_res.scalars().all()
-            if not db_cues:
-                raise ValueError("Dự án chưa có phụ đề. Vui lòng bấm 'Nhận diện & Dịch AI' trước khi burn video.")
-
-            proj_cfg = project.settings_override or {}
-            bilingual_mode = proj_cfg.get("bilingual", False)
-            sub_preset = proj_cfg.get("subtitle_preset", "box_banner")
-            mask_sub = proj_cfg.get("mask_original_sub", True)
-            clean_mode = proj_cfg.get("clean_chinese_mode", "cinema_bars" if mask_sub else "none")
-            top_mask_pct = float(proj_cfg.get("top_mask_pct", 11.0)) / 100.0
-            bottom_mask_pct = float(proj_cfg.get("bottom_mask_pct", 15.0)) / 100.0
-
-            # 1. Total Duration
-            total_dur = project.video_duration_seconds
-            if not total_dur or total_dur <= 0:
-                total_dur = await asyncio.to_thread(asr_service.get_audio_duration, video_path)
-                if not total_dur or total_dur <= 0:
-                    total_dur = 3600.0  # Fallback
-
-            CHUNK_DUR = 600.0  # 10 phút mỗi chunk
-            num_chunks = max(1, int(total_dur // CHUNK_DUR) + (1 if total_dur % CHUNK_DUR > 0 else 0))
-            sem = asyncio.Semaphore(2)  # Max 2 NVENC sessions concurrently
-
-            async def process_chunk(idx: int):
-                async with sem:
-                    chunk_start = idx * CHUNK_DUR
-                    chunk_dur = min(CHUNK_DUR, total_dur - chunk_start)
-                    if chunk_dur <= 0.1: return None
-                    
-                    # Cập nhật tiến độ
-                    pct = 85 + int(((idx + 1) / num_chunks) * 10)
-                    project.progress_percentage = pct
-                    project.error_message = f"Đang burn chunk {idx+1}/{num_chunks}..."
-                    await db.commit()
-                    await ws_manager.broadcast_to_project(project_id, "PROGRESS_UPDATE", {
-                        "progress": pct, "percentage": pct, "message": project.error_message
-                    })
-
-                    # A. Cắt raw chunk
-                    raw_chunk_path = p_dir / f"raw_chunk_{idx}.mp4"
-                    ffmpeg_bin = settings.get_ffmpeg_bin()
-                    cut_cmd = [
-                        ffmpeg_bin, "-y", "-ss", str(chunk_start), "-t", str(chunk_dur),
-                        "-i", str(video_path), "-c", "copy", str(raw_chunk_path)
-                    ]
-                    proc = await asyncio.create_subprocess_exec(*cut_cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-                    await proc.communicate()
-
-                    # B. Tạo ASS cho chunk (đã offset thời gian)
-                    chunk_cues = []
-                    for c in db_cues:
-                        if c.end_time >= chunk_start and c.start_time <= chunk_start + chunk_dur:
-                            chunk_cues.append({
-                                "start_time": max(0.0, c.start_time - chunk_start),
-                                "end_time": c.end_time - chunk_start,
-                                "original_text": c.original_text,
-                                "translated_text": c.translated_text or c.original_text,
-                                "speaker_tag": c.speaker_tag
-                            })
-                    
-                    chunk_ass_path = p_dir / f"chunk_{idx}.ass"
-                    chunk_ass_content = subtitle_generator.generate_ass(chunk_cues, bilingual=bilingual_mode, preset=sub_preset)
-                    await storage_service.write_text_file(chunk_ass_path, chunk_ass_content)
-
-                    # C. Burn phụ đề
-                    burned_chunk_path = p_dir / f"burned_chunk_{idx}.mp4"
-                    if raw_chunk_path.exists():
+            async def render(index):
+                async with semaphore:
+                    start = index * chunk_duration
+                    length = min(chunk_duration, duration - start)
+                    output = chunk_dir / f'{index}.mp4'
+                    if output.is_file():
+                        try:
+                            await validate_duration(output, length, video=True)
+                            return index, output
+                        except (RuntimeError, OSError):
+                            logger.warning('Invalid render checkpoint %s; regenerating', output.name)
+                    ass_path = chunk_dir / f'{index}.ass'
+                    chunk_cues = [{**c, 'start_time': max(0., c['start_time'] - start), 'end_time': min(length, c['end_time'] - start)}
+                                  for c in payload if c['end_time'] > start and c['start_time'] < start + length]
+                    await storage_service.write_text_file(ass_path, subtitle_generator.generate_ass(chunk_cues, bilingual=cfg.get('bilingual', False), preset=cfg.get('subtitle_preset', 'cinema')))
+                    temporary = output.with_name(f'{index}.partial.mp4')
+                    try:
                         await video_burner.burn_subtitles_to_video(
-                            video_path=raw_chunk_path,
-                            ass_subtitle_path=chunk_ass_path,
-                            output_video_path=burned_chunk_path,
-                            mask_original_sub=mask_sub,
-                            clean_chinese_mode=clean_mode,
-                            top_mask_pct=top_mask_pct,
-                            bottom_mask_pct=bottom_mask_pct
+                            video_path, ass_path, temporary,
+                            mask_original_sub=cfg.get('mask_original_sub', True),
+                            clean_chinese_mode=cfg.get('clean_chinese_mode', 'cinema_bars'),
+                            top_mask_pct=cfg.get('top_mask_pct', 11.) / 100,
+                            bottom_mask_pct=cfg.get('bottom_mask_pct', 15.) / 100,
+                            start_time=start, duration=length,
                         )
-                    
-                    # Dọn dẹp
-                    if raw_chunk_path.exists(): raw_chunk_path.unlink()
-                    if chunk_ass_path.exists(): chunk_ass_path.unlink()
-                    
-                    return burned_chunk_path
+                        await validate_duration(temporary, length, video=True)
+                        temporary.replace(output)
+                        return index, output
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                        ass_path.unlink(missing_ok=True)
 
-            tasks = [process_chunk(i) for i in range(num_chunks)]
-            results = await asyncio.gather(*tasks)
-            burned_chunks = [r for r in results if r and r.exists()]
-
-            if burned_chunks:
-                project.error_message = "Đang nối các chunk (Lossless Concat)..."
+            tasks = [asyncio.create_task(render(index)) for index in range(count)]
+            results = {}
+            for finished in asyncio.as_completed(tasks):
+                index, path = await finished
+                results[index] = path
+                project.progress_percentage = 85 + int(len(results) / count * 10)
+                project.error_message = f'Burned {len(results)}/{count} chunks'
                 await db.commit()
-                await video_burner.lossless_concat_chunks(burned_chunks, output_burned)
-                
-                # Cleanup burned chunks
-                for bc in burned_chunks:
-                    if bc.exists(): bc.unlink()
-            
-            project.burned_video_path = str(output_burned)
-            project.burned_video_url = storage_service.get_relative_url(output_burned)
-
-            # Khôi phục ASS tổng để tải xuống (nếu có)
-            ass_content = subtitle_generator.generate_ass([
-                {
-                    "start_time": c.start_time,
-                    "end_time": c.end_time,
-                    "original_text": c.original_text,
-                    "translated_text": c.translated_text or c.original_text,
-                    "speaker_tag": c.speaker_tag
-                }
-                for c in db_cues
-            ], bilingual=bilingual_mode, preset=sub_preset)
-            await storage_service.write_text_file(ass_path, ass_content)
-            project.subtitles_ass_path = str(ass_path)
-
-            project.status = "COMPLETED"
-            project.current_stage = "COMPLETED"
-            project.progress_percentage = 100
+                await ws_manager.broadcast_to_project(project_id, 'PROGRESS_UPDATE', {'stage': 'BURNING', 'progress': project.progress_percentage, 'message': project.error_message})
+            if len(results) != count:
+                raise RuntimeError('Missing rendered chunks')
+            output = p_dir / f'output_{uuid.uuid4().hex}.mp4'
+            await video_burner.lossless_concat_chunks([results[i] for i in range(count)], output)
+            await validate_duration(output, duration, video=True)
+            project.burned_video_path, project.burned_video_url = str(output), storage_service.get_relative_url(output)
+            project.status, project.current_stage, project.progress_percentage = 'COMPLETED', 'COMPLETED', 100
+            project.error_message = None
             await db.commit()
-
-            await ws_manager.broadcast_to_project(
-                project_id,
-                "STATUS_UPDATE",
-                {
-                    "status": "COMPLETED",
-                    "current_stage": "COMPLETED",
-                    "progress": 100,
-                    "burned_video_url": project.burned_video_url
-                }
-            )
-        except Exception as e:
-            logger.error(f"Burning error for project {project_id}: {e}", exc_info=True)
-            project.status = "FAILED"
-            project.error_message = str(e)
-            await db.commit()
-            await ws_manager.broadcast_to_project(project_id, "PIPELINE_ERROR", {"error": str(e)})
+            await ws_manager.broadcast_to_project(project_id, 'STATUS_UPDATE', {'status': 'COMPLETED', 'current_stage': 'COMPLETED', 'progress': 100, 'burned_video_url': project.burned_video_url})
+        except BaseException as error:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await db.rollback()
+            if isinstance(error, Exception):
+                logger.exception('Burn failed for %s', project_id)
+                await db.execute(update(Project).where(Project.id == project_id).values(status='FAILED', error_message=str(error) or type(error).__name__))
+                await db.commit()
+                await ws_manager.broadcast_to_project(project_id, 'PIPELINE_ERROR', {'status': 'FAILED', 'error': str(error)})
+            raise
 
 
 workflow_engine = WorkflowEngine()

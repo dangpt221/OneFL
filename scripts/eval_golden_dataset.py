@@ -1,6 +1,6 @@
 """
-Benchmark & Evaluation Runner for OneFL Golden Dataset (1000 items).
-Evaluates 100% of test cases across all 4 Guardrail Tiers, calculates CPS metrics,
+Reference-fixture quality checks for OneFL rule engine; no live provider evaluation.
+Evaluates all independent reference cases across all 4 Guardrail Tiers, calculates CPS metrics,
 line length distributions, language performance, and outputs a formatted benchmark report.
 """
 import json
@@ -18,7 +18,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from app.services.guardrails import SubtitleGuardrails
 
-DATASET_FILE = Path(__file__).resolve().parent.parent / "data" / "golden_dataset_1000.json"
+DATASET_FILE = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "translation_cases.json"
 
 
 def evaluate_dataset():
@@ -33,6 +33,7 @@ def evaluate_dataset():
     passed_cases = 0
     failed_cases = 0
     all_violations = []
+    unexpected = []
 
     # Metrics
     lang_stats = {}
@@ -93,6 +94,8 @@ def evaluate_dataset():
                 cps = SubtitleGuardrails.calculate_cps(text, cue_orig["duration"])
                 all_cps.append(cps)
 
+        if {v['type'] for v in violations} != set(item['expected_rule_violations']):
+            unexpected.append(case_id)
         if is_valid:
             passed_cases += 1
             lang_stats[src_lang]["passed"] += 1
@@ -113,7 +116,7 @@ def evaluate_dataset():
 
     # Print Report
     print("=" * 80)
-    print("           ONEFL PIPELINE GOLDEN DATASET BENCHMARK REPORT")
+    print("           ONEFL RULE-ENGINE FIXTURE VALIDATION REPORT")
     print("=" * 80)
     print(f"Tổng số ca kiểm thử:           {total_cases} ca")
     print(f"Tổng số dòng phụ đề (Cues):     {total_cues} cues")
@@ -141,11 +144,14 @@ def evaluate_dataset():
     print(f"   * Tỷ lệ câu ngắt 2 dòng tự nhiên:  {round((multiline_count / total_cues) * 100, 1)}%")
 
     print("-" * 80)
-    print("4. KẾT LUẬN KIỂM CHỨNG TOÀN DIỆN:")
+    print("4. KẾT QUẢ KIỂM TRA RULE ENGINE (KHÔNG PHẢI END-TO-END):")
     if failed_cases == 0:
-        print("   >>> CHÚC MỪNG: 1000/1000 ca kiểm thử ĐẠT CHUẨN 100% TRÊN TOÀN BỘ PIPELINE! <<<")
+        print("   >>> All reference fixtures passed the rule engine; ASR, live translation and rendering were not evaluated. <<<")
     else:
         print(f"   >>> CẢNH BÁO: Còn {failed_cases} ca vi phạm cần rà soát! <<<")
+    print(f"Expected rule outcomes: {total_cases - len(unexpected)}/{total_cases}; live providers and media were not evaluated")
+    if unexpected:
+        raise RuntimeError(f'Unexpected rule outcomes in fixtures: {unexpected}')
     print("=" * 80)
 
 

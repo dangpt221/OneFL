@@ -1,3 +1,5 @@
+> **Trạng thái triển khai ngày 2026-10-21:** Các phần kiến trúc phân tán bên dưới là thiết kế đích. Phiên bản hiện tại dùng FastAPI/Next.js, hàng đợi job trong database, DB lease + OS file lock trên một máy, local storage, Faster-Whisper theo chunk, trộn PCM theo block và burn có checkpoint. S3/Tus, Temporal, Redis Pub/Sub và cụm GPU phân tán chưa được triển khai. Diarization và quan sát frame thật là tích hợp tùy chọn, chưa đánh giá trên video 10 giờ. Xem [hướng dẫn vận hành](README.md) và [kết quả sửa lỗi](docs/reviews/2026-10-21-remediation-results.md) để biết phạm vi đã kiểm chứng.
+
 # KIẾN TRÚC HỆ THỐNG DỊCH TỰ ĐỘNG & DÁN PHỤ ĐỀ VIDEO THỜI LƯỢNG LỚN (LÊN TỚI 10 TIẾNG)
 **Auto Video Translation & Subtitle Burner System Architecture (Large Scale - 10h+ Video)**
 

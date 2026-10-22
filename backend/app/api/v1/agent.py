@@ -23,7 +23,7 @@ class ExecuteToolRequest(BaseModel):
 
 
 class AgentChatRequest(BaseModel):
-    goal: str = Field(..., description="Yêu cầu hoặc mục tiêu phân công cho Agent")
+    goal: str = Field(..., min_length=1, max_length=4000, description="Yêu cầu hoặc mục tiêu phân công cho Agent")
     context: Optional[Dict[str, Any]] = Field(None, description="Bối cảnh dữ liệu phụ trợ (project_id, video_path, v.v.)")
     max_iterations: int = Field(5, ge=1, le=10, description="Giới hạn số bước suy luận ReAct (1-10)")
 
@@ -36,7 +36,8 @@ async def list_agent_tools() -> Dict[str, Any]:
         tools_list.append({
             "name": tool.name,
             "description": tool.description,
-            "function_calling_schema": tool.to_function_calling_schema()
+            "function_calling_schema": tool.to_function_calling_schema(),
+            "output_schema": tool.output_model.model_json_schema(),
         })
     return {
         "total_tools": len(tools_list),
@@ -50,15 +51,19 @@ async def execute_tool(req: ExecuteToolRequest) -> Dict[str, Any]:
     try:
         result = await agent_toolkit.execute(req.tool_name, req.arguments)
         return {
-            "success": True,
+            "success": result.get('success', True),
             "tool_name": req.tool_name,
             "result": result
         }
+    except HTTPException:
+        raise
     except KeyError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     except Exception as e:
         logger.error(f"Error executing tool '{req.tool_name}': {e}", exc_info=True)
         raise HTTPException(
@@ -77,6 +82,10 @@ async def agent_chat(req: AgentChatRequest) -> AgentExecutionResult:
             max_iterations=req.max_iterations
         )
         return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     except Exception as e:
         logger.error(f"Agent chat execution failed: {e}", exc_info=True)
         raise HTTPException(

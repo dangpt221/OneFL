@@ -1,0 +1,105 @@
+[
+  {
+    "check": "duplicate_trigger",
+    "active_status": "PROCESSING",
+    "queued_tasks": 2
+  },
+  {
+    "check": "burn_missing_import",
+    "status": "FAILED",
+    "error": "name 'settings' is not defined"
+  },
+  {
+    "check": "burn_options_json_mutation_not_saved",
+    "requested_bilingual": true,
+    "persisted_bilingual": false
+  },
+  {
+    "check": "glossary_auto_extract",
+    "http_status": 500
+  },
+  {
+    "check": "unauthenticated_project_list",
+    "http_status": 200
+  },
+  {
+    "check": "reset_json_body_ignored",
+    "requested": "CREATED",
+    "actual": "WAITING_REVIEW"
+  },
+  {
+    "check": "incomplete_chunk_upload_accepted",
+    "http_status": 200,
+    "file_bytes": 14,
+    "missing_prefix_bytes": 10
+  },
+  {
+    "check": "replacement_upload_retains_tail",
+    "new_input_bytes": 3,
+    "actual_bytes": 14
+  },
+  {
+    "check": "asr_failure_returns_demo",
+    "cues": 2,
+    "first_text": "大家早上好，欢迎来到今天的系统架构评审会议。"
+  },
+  {
+    "check": "translation_failure_accepted",
+    "text": "Hello",
+    "violation": false
+  },
+  {
+    "check": "reflexion_valid_repair_discarded",
+    "expected_repair": "Xin chào",
+    "actual": "Hello"
+  },
+  {
+    "check": "guardrail_silent_truncation",
+    "input_words": 40,
+    "output_words": 16,
+    "valid": true,
+    "violations": []
+  },
+  {
+    "check": "pronoun_guard_skipped_for_db_list",
+    "dict_valid": false,
+    "db_list_valid": true
+  },
+  {
+    "check": "pipeline_retranslate_skips_existing_text",
+    "provider_calls": 0,
+    "retained_text": "old translation"
+  },
+  {
+    "check": "agent_tts_missing_method",
+    "error": "'TTSService' object has no attribute 'preview_voice'"
+  },
+  {
+    "check": "agent_translate_only_builds_prompt",
+    "returned_keys": [
+      "cues_count",
+      "system_prompt",
+      "user_prompt_ready"
+    ]
+  },
+  {
+    "check": "burn_failure_copies_original",
+    "returned_normally": true,
+    "identical_bytes": true
+  },
+  {
+    "check": "media_duration_replaced_by_dialogue_end",
+    "original_duration": 12.0,
+    "stored_duration": 4.0,
+    "status": "WAITING_REVIEW"
+  },
+  {
+    "check": "download_progress_missing_asyncio",
+    "module_import_present": false
+  },
+  {
+    "check": "parallel_burn_shared_session_error",
+    "error_type": "IllegalStateChangeError",
+    "error": "Method 'commit()' can't be called here; method '_prepare_impl()' is already in progress and this would cause an unexpected state change to <SessionTransactionState.CLOSED: 5> (Background on this error at: https://sqlalche.me/e/20/isce)"
+  }
+]

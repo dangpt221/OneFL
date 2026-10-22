@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 from app.config import settings
+from app.services.media_process import run_media, probe_media
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +34,10 @@ class AudioService:
                 str(output_audio_path)
             ]
             logger.info(f"Running FFmpeg audio extraction: {' '.join(cmd)}")
-            loop = asyncio.get_running_loop()
-            import subprocess
-            proc = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(cmd, capture_output=True)
-            )
-            if proc.returncode != 0:
-                logger.warning(f"FFmpeg extraction warning: {proc.stderr.decode(errors='ignore')}")
+            await run_media(cmd)
+            await probe_media(output_audio_path, require_audio=True)
         else:
-            # Fallback for dev environment without ffmpeg: create empty or copy placeholder
-            logger.info("FFmpeg binary not detected in PATH. Creating placeholder audio track for dev.")
-            with open(output_audio_path, "wb") as f:
-                f.write(b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00")
+            raise RuntimeError("FFmpeg is required for audio extraction")
 
         return output_audio_path
 
@@ -57,14 +49,15 @@ class AudioService:
     ) -> List[Tuple[int, float, float, Path]]:
         """Calculates chunk boundaries and generates split audio files."""
         chunks = []
-        if total_duration <= 0:
-            total_duration = 30.0 # Default fallback
+        if total_duration <= 0 or chunk_duration <= 0:
+            raise ValueError("Audio duration and chunk duration must be positive")
             
         current_start = 0.0
         idx = 0
         while current_start < total_duration:
             current_end = min(current_start + chunk_duration, total_duration)
             chunk_file = audio_path.parent / f"chunk_{idx}_{int(current_start)}_{int(current_end)}.wav"
+            await run_media([settings.get_ffmpeg_bin(), '-y', '-ss', str(current_start), '-i', str(audio_path), '-t', str(current_end - current_start), '-c:a', 'pcm_s16le', str(chunk_file)])
             chunks.append((idx, current_start, current_end, chunk_file))
             current_start = current_end
             idx += 1

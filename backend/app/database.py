@@ -1,8 +1,10 @@
 import logging
+import asyncio
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import event
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -12,6 +14,10 @@ db_url = settings.DATABASE_URL
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+if db_url.startswith('sqlite+aiosqlite:///./'):
+    from pathlib import Path
+    location = (settings.ROOT_DIR / 'backend' / db_url.split('///./', 1)[1]).resolve()
+    db_url = 'sqlite+aiosqlite:///' + location.as_posix()
 is_postgres = "postgresql" in db_url
 engine_kwargs = {
     "echo": False,
@@ -27,6 +33,13 @@ if is_postgres:
     })
 
 engine = create_async_engine(db_url, **engine_kwargs)
+if not is_postgres:
+    @event.listens_for(engine.sync_engine, 'connect')
+    def sqlite_pragmas(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute('PRAGMA foreign_keys=ON')
+        cursor.execute('PRAGMA busy_timeout=30000')
+        cursor.close()
 
 
 AsyncSessionLocal = async_sessionmaker(
@@ -40,61 +53,46 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 
+async def _close_session(session: AsyncSession) -> None:
+    """Finish rollback/connection return even when the caller disconnects."""
+    cleanup = asyncio.create_task(session.close())
+    cancelled = False
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            if cleanup.cancelled():
+                raise
+            cancelled = True
+    try:
+        cleanup.result()
+    except Exception:
+        logger.exception('Database session cleanup failed')
+        raise
+    if cancelled:
+        raise asyncio.CancelledError()
+
+
 @asynccontextmanager
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """Context manager for obtaining async DB sessions in background tasks."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    session = AsyncSessionLocal()
+    try:
+        yield session
+    finally:
+        # AsyncSession.close rolls back an unfinished transaction and releases
+        # its connection. Shield the entire operation, not competing close calls.
+        await _close_session(session)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI Dependency for obtaining async DB sessions."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    async with get_async_session() as session:
+        yield session
 
 
 async def init_db():
-    """Create all database tables."""
-    global engine, AsyncSessionLocal
-    # Import all models so that Base.metadata knows about them
-    from app.models import project, subtitle, speaker, glossary  # noqa
-    
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info(f"Database initialized successfully on {engine.url.database or 'SQLite'}.")
-    except Exception as e:
-        logger.warning(f"Database error on {engine.url}: {e}. Auto-switching to SQLite fallback...")
-        sqlite_url = "sqlite+aiosqlite:///./onefl_videotrans.db"
-        engine = create_async_engine(sqlite_url, echo=False, future=True)
-        AsyncSessionLocal.configure(bind=engine)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("SQLite database initialized successfully.")
-
-    # Safe column migration for SQLite / PostgreSQL
-    try:
-        from sqlalchemy import text
-        async with engine.begin() as conn:
-            migration_cols = [
-                ("projects", "dubbed_video_url", "TEXT"),
-                ("projects", "dubbed_video_path", "TEXT"),
-                ("projects", "dubbed_audio_url", "TEXT"),
-                ("projects", "dubbed_audio_path", "TEXT"),
-                ("projects", "default_voice", "VARCHAR(50) DEFAULT 'vi-VN-HoaiMyNeural'"),
-                ("speaker_profiles", "tts_voice", "VARCHAR(50) DEFAULT 'vi-VN-HoaiMyNeural'"),
-                ("speaker_profiles", "tts_speed", "FLOAT DEFAULT 1.0"),
-            ]
-            for table, col, col_type in migration_cols:
-                try:
-                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type};"))
-                except Exception:
-                    pass  # Column already exists
-    except Exception as e:
-        logger.debug(f"Migration check: {e}")
+    """Use one database; an unavailable production DB is a startup error."""
+    from app.services.db_migrator import run_migrations
+    await run_migrations(engine)
+    logger.info('Database initialized and migrated (%s)', engine.dialect.name)

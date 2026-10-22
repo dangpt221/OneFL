@@ -1,3 +1,5 @@
+> **Hợp đồng thực thi ngày 2026-10-21:** Dịch dùng provider Gemini/OpenAI đã cấu hình; lỗi provider hoặc QC chưa sửa được làm job thất bại. Guardrails bảo toàn từ, kiểm tra ID/schema, đại từ với người nghe xác định, glossary và giới hạn vật lý; không chứng minh đầy đủ tính đúng nghĩa. Resume kiểm tra lại bản dịch lưu; force giữ chỉnh tay và lưu cảnh báo QC. ASR mặc định không tách người nói; tùy chọn pyannote và vision dùng dữ liệu/model thật khi được bật, không giả speaker hay suy ra đã nhìn video chỉ từ prompt. Bộ kiểm thử rule engine có 15 thoại độc lập (10 hợp lệ, 5 phải bị chặn CPS), không phải benchmark ASR/dịch/render end-to-end. Xem [README](README.md).
+
 # THIẾT KẾ CHI TIẾT HỆ THỐNG DỊCH THUẬT AI CHUYÊN SÂU (AI TRANSLATION ENGINE & GUARDRAILS)
 **Đa Ngôn Ngữ: Tiếng Anh, Trung, Nhật, Hàn $\rightarrow$ Tiếng Việt**
 **Xử lý Ngữ cảnh, Giới tính, Đại từ xưng hô, Chunking & Guardrails**

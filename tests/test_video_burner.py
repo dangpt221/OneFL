@@ -45,5 +45,5 @@ async def test_detect_best_encoder():
 @pytest.mark.asyncio
 async def test_lossless_concat_chunks_empty(tmp_path):
     output_path = tmp_path / "out_concat.mp4"
-    result = await video_burner.lossless_concat_chunks([], output_path)
-    assert result == output_path
+    with pytest.raises(ValueError):
+        await video_burner.lossless_concat_chunks([], output_path)

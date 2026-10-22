@@ -2,6 +2,7 @@ import os
 import re
 import asyncio
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 import yt_dlp
@@ -59,6 +60,8 @@ class VideoDownloaderService:
 
     async def extract_info(self, url: str) -> Dict[str, Any]:
         """Extract metadata (Title, duration, thumbnail) without downloading video."""
+        from app.services.url_security import validate_video_url
+        await validate_video_url(url)
         loop = asyncio.get_running_loop()
         platform = self.detect_platform(url)
 
@@ -114,11 +117,14 @@ class VideoDownloaderService:
         merging into a standard high-compatibility MP4 file.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
+        from app.services.url_security import validate_video_url
+        await validate_video_url(url)
         loop = asyncio.get_running_loop()
         platform = self.detect_platform(url)
 
         # File template
         out_tmpl = str(output_dir / "video_%(id)s.%(ext)s")
+        cancelled = threading.Event()
 
         ydl_opts = self._get_base_ydl_opts()
         ydl_opts.update({
@@ -137,42 +143,50 @@ class VideoDownloaderService:
                 ydl_opts["noplaylist"] = False
                 ydl_opts["playlist_items"] = p_match.group(1)
 
-        if progress_callback:
-            def ydl_hook(d):
-                if d.get("status") == "downloading":
-                    pct = 0.0
-                    # Try percentage string first (most accurate in yt-dlp)
-                    if d.get("_percent_str"):
-                        try:
-                            clean_str = re.sub(r'\x1b\[[0-9;]*m', '', d["_percent_str"]).replace('%', '').strip()
-                            pct = float(clean_str)
-                        except Exception:
-                            pct = 0.0
-                    if pct <= 0.0:
-                        total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                        downloaded = d.get("downloaded_bytes") or 0
-                        if total > 0:
-                            pct = (downloaded / total) * 100.0
-                        elif d.get("fragment_count") and d.get("fragment_index"):
-                            pct = (d["fragment_index"] / d["fragment_count"]) * 100.0
+        def ydl_hook(d):
+            if cancelled.is_set():
+                raise RuntimeError('Download cancelled')
+            if d.get("status") == "downloading":
+                pct = 0.0
+                # Try percentage string first (most accurate in yt-dlp)
+                if d.get("_percent_str"):
+                    try:
+                        clean_str = re.sub(r'\x1b\[[0-9;]*m', '', d["_percent_str"]).replace('%', '').strip()
+                        pct = float(clean_str)
+                    except Exception:
+                        pct = 0.0
+                if pct <= 0.0:
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                    downloaded = d.get("downloaded_bytes") or 0
+                    if total > 0:
+                        pct = (downloaded / total) * 100.0
+                    elif d.get("fragment_count") and d.get("fragment_index"):
+                        pct = (d["fragment_index"] / d["fragment_count"]) * 100.0
 
-                    speed = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_speed_str") or "").strip()
-                    eta = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_eta_str") or "").strip()
-                    downloaded_str = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_downloaded_bytes_str") or "").strip()
-                    total_str = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_total_bytes_str") or "").strip()
+                speed = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_speed_str") or "").strip()
+                eta = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_eta_str") or "").strip()
+                downloaded_str = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_downloaded_bytes_str") or "").strip()
+                total_str = re.sub(r'\x1b\[[0-9;]*m', '', d.get("_total_bytes_str") or "").strip()
 
-                    progress_info = {
-                        "pct": min(100.0, max(0.0, round(pct, 1))),
-                        "speed": speed,
-                        "eta": eta,
-                        "downloaded": downloaded_str,
-                        "total": total_str
-                    }
+                progress_info = {
+                    "pct": min(100.0, max(0.0, round(pct, 1))),
+                    "speed": speed,
+                    "eta": eta,
+                    "downloaded": downloaded_str,
+                    "total": total_str
+                }
 
-                    if loop.is_running():
-                        asyncio.run_coroutine_threadsafe(progress_callback(progress_info), loop)
+                if progress_callback and loop.is_running():
+                    # Wait on the download thread, so DB callbacks stay sequential
+                    # and callback exceptions reach the durable job.
+                    future = asyncio.run_coroutine_threadsafe(progress_callback(progress_info), loop)
+                    try:
+                        future.result(timeout=30)
+                    except BaseException:
+                        future.cancel()
+                        raise
 
-            ydl_opts["progress_hooks"] = [ydl_hook]
+        ydl_opts["progress_hooks"] = [ydl_hook]
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -185,9 +199,7 @@ class VideoDownloaderService:
                 elif os.path.exists(filename):
                     final_path = Path(filename)
                 else:
-                    # Search output_dir for any downloaded video
-                    files = list(output_dir.glob("video_*.*"))
-                    final_path = files[0] if files else Path(filename)
+                    raise RuntimeError('The expected downloaded video is missing')
 
                 return {
                     "file_path": final_path,
@@ -198,7 +210,13 @@ class VideoDownloaderService:
 
         try:
             logger.info(f"Starting yt-dlp download for URL: {url} on platform: {platform}")
-            result = await loop.run_in_executor(None, _download)
+            download_task = asyncio.create_task(asyncio.to_thread(_download))
+            try:
+                result = await asyncio.shield(download_task)
+            except asyncio.CancelledError:
+                cancelled.set()
+                await asyncio.gather(download_task, return_exceptions=True)
+                raise
             logger.info(f"Successfully downloaded video to: {result['file_path']}")
             return {
                 "success": True,

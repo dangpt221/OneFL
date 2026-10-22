@@ -1,6 +1,6 @@
 """OneFL Agent Toolkit & Orchestration Package.
 
-Provides 10 specialized video translation & subtitle processing tools,
+Provides media, project and durable-job tools,
 ReAct agent runner, and API endpoints for seamless LLM Function Calling.
 """
 

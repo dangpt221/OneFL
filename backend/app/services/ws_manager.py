@@ -1,4 +1,5 @@
 import json
+import asyncio
 import logging
 from typing import Dict, Set, Any
 from fastapi import WebSocket
@@ -13,6 +14,9 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, project_id: str):
+        if sum(map(len, self.active_connections.values())) >= 1000 or len(self.active_connections.get(project_id, ())) >= 20:
+            await websocket.close(code=4429)
+            raise RuntimeError('WebSocket connection quota exceeded')
         await websocket.accept()
         if project_id not in self.active_connections:
             self.active_connections[project_id] = set()
@@ -38,6 +42,10 @@ class ConnectionManager:
             event_type = str(event_type_or_data)
             payload = data
 
+        event_type = str(event_type).upper()
+        if event_type in {'PIPELINE_FAILED', 'PIPELINE_ERROR'}:
+            event_type = 'PIPELINE_ERROR'
+            payload = {**(payload or {}), 'status': 'FAILED'}
         message = {
             "type": event_type,
             "project_id": project_id,
@@ -48,7 +56,7 @@ class ConnectionManager:
 
         for connection in list(self.active_connections.get(project_id, [])):
             try:
-                await connection.send_text(raw_message)
+                await asyncio.wait_for(connection.send_text(raw_message), timeout=2)
             except Exception as e:
                 logger.warning(f"Error sending to websocket: {e}")
                 dead_sockets.add(connection)

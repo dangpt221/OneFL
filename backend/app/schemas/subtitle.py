@@ -1,26 +1,43 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SubtitleCueCreate(BaseModel):
-    cue_index: int
-    start_time: float
-    end_time: float
+    model_config = ConfigDict(allow_inf_nan=False)
+    cue_index: int = Field(ge=1)
+    start_time: float = Field(ge=0)
+    end_time: float = Field(gt=0)
     original_text: str
     translated_text: Optional[str] = None
     speaker_tag: str = "SPEAKER_00"
     target_speaker_tag: Optional[str] = None
 
+    @model_validator(mode='after')
+    def ordered_times(self):
+        if self.end_time <= self.start_time:
+            raise ValueError('end_time must be greater than start_time')
+        return self
+
 
 class SubtitleCueUpdate(BaseModel):
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
+    model_config = ConfigDict(allow_inf_nan=False)
+    start_time: Optional[float] = Field(None, ge=0)
+    end_time: Optional[float] = Field(None, gt=0)
     original_text: Optional[str] = None
     translated_text: Optional[str] = None
     speaker_tag: Optional[str] = None
     target_speaker_tag: Optional[str] = None
     is_edited: Optional[bool] = True
+
+    @model_validator(mode='after')
+    def valid_patch(self):
+        for name in ('start_time', 'end_time', 'original_text', 'speaker_tag', 'is_edited'):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f'{name} cannot be null')
+        if self.start_time is not None and self.end_time is not None and self.end_time <= self.start_time:
+            raise ValueError('end_time must be greater than start_time')
+        return self
 
 
 class BatchSubtitleUpdate(BaseModel):

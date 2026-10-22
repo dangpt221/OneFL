@@ -4,43 +4,26 @@ from datetime import timedelta
 from app.config import settings
 
 
+def _timestamp_parts(seconds: float, precision: int):
+    ticks = round(max(0.0, seconds) * precision)
+    total, fraction = divmod(ticks, precision)
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    return hours, minutes, secs, fraction
+
+
 def format_timestamp_ass(seconds: float) -> str:
-    """Format seconds into ASS timestamp: H:MM:SS.cc (centiseconds)."""
-    td = timedelta(seconds=max(0.0, seconds))
-    total_seconds = int(td.total_seconds())
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    secs = total_seconds % 60
-    centis = int(round((seconds - int(seconds)) * 100))
-    if centis >= 100:
-        centis = 99
-    return f"{hours}:{minutes:02d}:{secs:02d}.{centis:02d}"
+    hours, minutes, secs, fraction = _timestamp_parts(seconds, 100)
+    return f"{hours}:{minutes:02d}:{secs:02d}.{fraction:02d}"
 
 
 def format_timestamp_srt(seconds: float) -> str:
-    """Format seconds into SRT timestamp: HH:MM:SS,mmm (milliseconds)."""
-    td = timedelta(seconds=max(0.0, seconds))
-    total_seconds = int(td.total_seconds())
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    secs = total_seconds % 60
-    millis = int(round((seconds - int(seconds)) * 1000))
-    if millis >= 1000:
-        millis = 999
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+    hours, minutes, secs, fraction = _timestamp_parts(seconds, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{fraction:03d}"
 
 
 def format_timestamp_vtt(seconds: float) -> str:
-    """Format seconds into WebVTT timestamp: HH:MM:SS.mmm."""
-    td = timedelta(seconds=max(0.0, seconds))
-    total_seconds = int(td.total_seconds())
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    secs = total_seconds % 60
-    millis = int(round((seconds - int(seconds)) * 1000))
-    if millis >= 1000:
-        millis = 999
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+    return format_timestamp_srt(seconds).replace(',', '.')
 
 
 class SubtitleGenerator:

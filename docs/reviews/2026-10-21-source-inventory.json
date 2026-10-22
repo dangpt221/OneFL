@@ -1,0 +1,482 @@
+﻿[
+    {
+        "path":  "scripts/init_database.py",
+        "lines":  133,
+        "sha256":  "148F72B536E794FA85C9E563DBFAC91BA1BCFFD37E0A16F1FE33791910CD3A64"
+    },
+    {
+        "path":  "scripts/generate_golden_dataset.py",
+        "lines":  389,
+        "sha256":  "2A21E696A4E3E17E3A9187709E9D5139E2A8FE624CE59424D3A792CF45165830"
+    },
+    {
+        "path":  "scripts/eval_golden_dataset.py",
+        "lines":  153,
+        "sha256":  "5096B4CF2108D39D72A5D6EA4868ACBCE44DE224AA28F284395380CDD20D41EC"
+    },
+    {
+        "path":  "scripts/build_master_glossary.py",
+        "lines":  574,
+        "sha256":  "24B254B8BE6B4E8636319E4108E7C6E80901FCB9072629654AAFCA72A98DD235"
+    },
+    {
+        "path":  "tests/__init__.py",
+        "lines":  1,
+        "sha256":  "865E940563184B870782E668BBD26D09389914B934BC8C199A58EB0D80B5EBAC"
+    },
+    {
+        "path":  "tests/test_video_burner.py",
+        "lines":  49,
+        "sha256":  "B91C314009A339D897A19F3F78803300DD2EBDDD4BF52767EFCF05A998564E84"
+    },
+    {
+        "path":  "tests/test_storage.py",
+        "lines":  40,
+        "sha256":  "1A2A9A9081B032D2040E327642B41B1FB9BD6063DF1A94694CD2C6CE54AA3A0E"
+    },
+    {
+        "path":  "tests/test_golden_dataset.py",
+        "lines":  141,
+        "sha256":  "D938CA4A8DAA51FA196E76F1531A8C3483BAB3EEAEACF9EEAC02C65E3BF1068F"
+    },
+    {
+        "path":  "tests/test_postgres_and_tts.py",
+        "lines":  120,
+        "sha256":  "5207C82E5ACC7A81EF011A05DAA4D066A267738D384CD35ED86FB1436CD8A3F3"
+    },
+    {
+        "path":  "tests/conftest.py",
+        "lines":  10,
+        "sha256":  "831235B5896AF4733F7ABA1216CE16ECB6A6A48DB20BE8B3419D004C949C5267"
+    },
+    {
+        "path":  "tests/test_guardrails.py",
+        "lines":  89,
+        "sha256":  "5F0D3BF8E427EC0176CA27CEBE4CCCE45836B1324D077228994557C9337CB36D"
+    },
+    {
+        "path":  "tests/test_agent_tools.py",
+        "lines":  202,
+        "sha256":  "E9A5FFD4C1CDC9EA8B359F65A56712432720496A6C439EF57F7FFC7599C39C71"
+    },
+    {
+        "path":  "frontend/src/styles/globals.css",
+        "lines":  67,
+        "sha256":  "EC1B73E7321F1EE3AA46FF250E723838848FC8337B1E7FA2A1B7E310C74ADE0A"
+    },
+    {
+        "path":  "frontend/src/components/VideoPlayer.tsx",
+        "lines":  495,
+        "sha256":  "33EF49E75D47493EAFC95120B8B265BF486FD89433B827B31B0DD0B5C17F1D7F"
+    },
+    {
+        "path":  "frontend/src/components/SubtitleEditor.tsx",
+        "lines":  608,
+        "sha256":  "F3F3D242242F99ACEB9E77D11F3AC58DB0E2D28D77AFF76D354849AEE97E4B7D"
+    },
+    {
+        "path":  "frontend/src/components/SpeakerMatrixModal.tsx",
+        "lines":  1263,
+        "sha256":  "02CD6AA6CBD6BC8099B35B2E7F0BD51D4257DD5A339EA020BDD560078042FB22"
+    },
+    {
+        "path":  "frontend/src/components/ProjectCard.tsx",
+        "lines":  182,
+        "sha256":  "F4C44CF94D91FFF850FEC9B2D6358278370CA745E5896A01C489D05A48373CFE"
+    },
+    {
+        "path":  "frontend/src/components/PipelineProgressTracker.tsx",
+        "lines":  812,
+        "sha256":  "89754747259AFCC8B3C334AA953B82C7B139F950459C0B1A0A9999F0DF8BB07B"
+    },
+    {
+        "path":  "frontend/src/components/Navbar.tsx",
+        "lines":  84,
+        "sha256":  "EE5EA161D52CF580A89808E3394502B8A52F1C3B69D58AEDD74C3B3C42F2C91D"
+    },
+    {
+        "path":  "frontend/src/components/GlossaryModal.tsx",
+        "lines":  555,
+        "sha256":  "4B3D32CC32391CB96F64695ACE7264D7D73A305F2A345A5EFE6CE3376A0CE425"
+    },
+    {
+        "path":  "frontend/src/components/GlossaryDrawer.tsx",
+        "lines":  200,
+        "sha256":  "71A7B07420D3AAD4E76E80575457E2979128B60ADD46E06218625619AC1A535E"
+    },
+    {
+        "path":  "frontend/src/components/DubbingModal.tsx",
+        "lines":  390,
+        "sha256":  "5B49F73AD43BD2EDB9676028496084A3AA26EE637F87E0B9B2673F442C349A75"
+    },
+    {
+        "path":  "frontend/src/components/CreateProjectModal.tsx",
+        "lines":  390,
+        "sha256":  "AF3A05C17D3870AC332E719B646B3B6D1BB9F0E78B38EA26B72AD219674C0AA8"
+    },
+    {
+        "path":  "frontend/src/components/BurnProgressModal.tsx",
+        "lines":  380,
+        "sha256":  "472E530E4E5C9A2848C1C65638C1F42217196F76306F0D83E394AD009AB6BAD7"
+    },
+    {
+        "path":  "frontend/src/lib/useWebSocket.ts",
+        "lines":  74,
+        "sha256":  "E0A2D57287F8DD6B298BD83D2AC6EDB63D39F5CE60B61843EEED13714C6E9510"
+    },
+    {
+        "path":  "frontend/src/lib/types.ts",
+        "lines":  178,
+        "sha256":  "E293C76B4D1C9EB5F902EDF7C369EE8545AE2315B8909418AAF7564CCAE9E53A"
+    },
+    {
+        "path":  "frontend/src/lib/api.ts",
+        "lines":  384,
+        "sha256":  "3767DA6BF663C657F0A62B8C2741F7BD4DEA0988BFB71021CF8EE9C4D95E95B6"
+    },
+    {
+        "path":  "backend/app/__init__.py",
+        "lines":  2,
+        "sha256":  "8A1CC43FCF64B269DDEB7CC33196D7125F4A2329FDF1DBADD542B3FE27A2DB60"
+    },
+    {
+        "path":  "backend/app/main.py",
+        "lines":  96,
+        "sha256":  "DFB1C0094C98D54098F310357D7DA657E98BD2B5D59A8985A8CD611C5BAD5C77"
+    },
+    {
+        "path":  "backend/app/database.py",
+        "lines":  100,
+        "sha256":  "CD9BBCE27C522EF586E05B29BC07A8E4D5B8912B948E73CFAA7693999C57905E"
+    },
+    {
+        "path":  "frontend/src/app/page.tsx",
+        "lines":  267,
+        "sha256":  "ABDA0E54153CBC7A57C06BADC920C92196269C1186672EF1EAFA4E7FE8FE913D"
+    },
+    {
+        "path":  "frontend/src/app/layout.tsx",
+        "lines":  32,
+        "sha256":  "4829E15D0E8A9137810A1C0C67DB299E3413BCBEB7EB07C75C9810F087E09115"
+    },
+    {
+        "path":  "backend/app/api/__init__.py",
+        "lines":  1,
+        "sha256":  "62A5321C0899CCD4059959663FF9CB484CB551E586CCC5F5D2EB509E89044AD6"
+    },
+    {
+        "path":  "frontend/src/app/settings/page.tsx",
+        "lines":  287,
+        "sha256":  "25BAD3053806357F13B4C38C011DF8BAD2A46DF8363E90B11D7CF3A49025D530"
+    },
+    {
+        "path":  "backend/app/config.py",
+        "lines":  160,
+        "sha256":  "93968ED65FD4D07214AB383B439890205B4CD6BBA912A8FFB061BD9C56F5AAE4"
+    },
+    {
+        "path":  "backend/app/agent/__init__.py",
+        "lines":  23,
+        "sha256":  "3B72F8B5A202D4A1FC954021F2BD192BE97082C1CE8BDCAD00B72E5D184F3626"
+    },
+    {
+        "path":  "backend/app/agent/tools.py",
+        "lines":  399,
+        "sha256":  "01C4E456240BB5AC8AAC89B07E7ACA5E6091A55E461F464728BE83F29FFF3515"
+    },
+    {
+        "path":  "backend/app/agent/agent_runner.py",
+        "lines":  259,
+        "sha256":  "47878E0D8D387E4FC02D1671E754EB75D67069B87ECDF018AFCBDC6C8DE74250"
+    },
+    {
+        "path":  "backend/app/constants/presets.py",
+        "lines":  429,
+        "sha256":  "75D65BC363B4DBF4D6D7C8B12E3456DED30734CC2C54B6712A6C7EFC0C639269"
+    },
+    {
+        "path":  "backend/app/api/v1/websocket.py",
+        "lines":  30,
+        "sha256":  "D138BC400E8975F009BEB25915166CAB40CD61383A1113872E964BB91DC2715E"
+    },
+    {
+        "path":  "backend/app/api/v1/tts.py",
+        "lines":  301,
+        "sha256":  "260FD0853AD087C7E92B47A64B5C4FA6846414844BED05C1F0B4FD0B4142B16D"
+    },
+    {
+        "path":  "backend/app/api/v1/subtitles.py",
+        "lines":  373,
+        "sha256":  "28F3B5C211E3230A2843AFC1A84DCAD82B4A45995D242FEA3301519C2939247D"
+    },
+    {
+        "path":  "backend/app/api/v1/speakers.py",
+        "lines":  418,
+        "sha256":  "BB1F0A99EC2ECFF08320066EABBCCB69F1F57F1D277AFCEA79B3576B2CEFAEC1"
+    },
+    {
+        "path":  "backend/app/api/v1/settings.py",
+        "lines":  51,
+        "sha256":  "7399AA3AA814E416CB98AFC911298AEFCA1FB076CE61777A32C9134BEBA03F56"
+    },
+    {
+        "path":  "backend/app/api/v1/projects.py",
+        "lines":  490,
+        "sha256":  "ACA6B2071F4916CB1106A8C16E02019738682CBCCC472382333C212201260FDC"
+    },
+    {
+        "path":  "backend/app/api/v1/pipeline.py",
+        "lines":  82,
+        "sha256":  "0DA377CF2C459D77B6C70ED9D6CF6747231FE109B269D884C316943D15F145D9"
+    },
+    {
+        "path":  "backend/app/api/v1/glossary.py",
+        "lines":  394,
+        "sha256":  "FEF0FEE1051E658EDB0A874830FAE792C203FBC7D874380FA50BCB48FD28002D"
+    },
+    {
+        "path":  "backend/app/api/v1/agent.py",
+        "lines":  85,
+        "sha256":  "8890AE7576EAED71D8182D71215F67E0E99EC82935AE959E7AAA5B8DEED31CBB"
+    },
+    {
+        "path":  "frontend/src/app/projects/[id]/page.tsx",
+        "lines":  635,
+        "sha256":  "976540007DD5162D7080C6A8AC2D8F5CE3018DCD6B613580AF91B384ACB906E5"
+    },
+    {
+        "path":  "backend/app/services/asr_service.py",
+        "lines":  194,
+        "sha256":  "67110368E91664EC64C7F8483354F8BEA5DED3EABAC8AB4A627813261E9CA3C5"
+    },
+    {
+        "path":  "backend/app/models/glossary.py",
+        "lines":  32,
+        "sha256":  "F0DE6BC1A506AC251904F6CF1027FFCF0E665DEDE1ECD1FAEEC02D19A0A01E50"
+    },
+    {
+        "path":  "backend/app/models/__init__.py",
+        "lines":  13,
+        "sha256":  "9378DD5F71B95B1D811AEE0CD8A54CD338DB950AE060E59713A24DB9BF3EFF9C"
+    },
+    {
+        "path":  "backend/app/models/subtitle.py",
+        "lines":  39,
+        "sha256":  "07124B44C7C00E95F700B6DF97C249A5AB138B210AE1BECB4742282919ED2A79"
+    },
+    {
+        "path":  "backend/app/models/speaker.py",
+        "lines":  62,
+        "sha256":  "D25CD956C88F6BAC50A1B1489DFA4F605D2A5EE68B0666E576CEE3745E7D4324"
+    },
+    {
+        "path":  "backend/app/models/project.py",
+        "lines":  76,
+        "sha256":  "78C2977D56C1535236D2E1A3381C57684D36F7DDC5FAFAC371880E2B8956F6B1"
+    },
+    {
+        "path":  "backend/app/services/audio_service.py",
+        "lines":  75,
+        "sha256":  "4E3D1E341E6E67713EB9318CF808A1EB63C6E4FF7C0852495C2573F8EBA9A34C"
+    },
+    {
+        "path":  "backend/app/services/db_migrator.py",
+        "lines":  52,
+        "sha256":  "4959F6E7ABCEB17B3B6C534910F784662A9B3C71F714C34CA6D213A4B19A4216"
+    },
+    {
+        "path":  "backend/app/services/guardrails.py",
+        "lines":  228,
+        "sha256":  "D382115D30E005F0E48DFC66D5D311E3929286FF22CABB9EF4DC70A290605ED2"
+    },
+    {
+        "path":  "backend/app/schemas/__init__.py",
+        "lines":  22,
+        "sha256":  "491691C9D5974D567AFE22241D54B3689A114B9CC5A0DAA31781FAABF96F4445"
+    },
+    {
+        "path":  "backend/app/schemas/translation.py",
+        "lines":  58,
+        "sha256":  "4619C2E78824F10D1B289F528C7BDFB7CAE0D921B3FC8C0F2924DE897247E51B"
+    },
+    {
+        "path":  "backend/app/schemas/subtitle.py",
+        "lines":  86,
+        "sha256":  "AB9CA332BAE3A458034AF70953488661AECAC986FD21F39C751C193208656ABA"
+    },
+    {
+        "path":  "backend/app/schemas/speaker.py",
+        "lines":  101,
+        "sha256":  "E46A46C730477E84735221CB0EEEDBB65B29E1C9185F36D06CBA7DCEE2EA4E59"
+    },
+    {
+        "path":  "backend/app/schemas/project.py",
+        "lines":  72,
+        "sha256":  "1E4C776563BCA9CA0796A9E19002E79AB837D7EB5EA293551A5863E342ED7F80"
+    },
+    {
+        "path":  "backend/app/schemas/glossary.py",
+        "lines":  62,
+        "sha256":  "6150F2CB2C1112AC67F1136A627E19C3EC4EC6126585273252EEA7E894C47780"
+    },
+    {
+        "path":  "backend/app/services/storage_service.py",
+        "lines":  102,
+        "sha256":  "1D85289D1774653C119B9F1D765B81D22C3A222BD4806FF356063A2A0E712C44"
+    },
+    {
+        "path":  "backend/app/services/speaker_profiler.py",
+        "lines":  131,
+        "sha256":  "3CC1F85150702DD49E5BEDB77513E0493130BCAA5000C9F8C02C7EF7EBB2CA46"
+    },
+    {
+        "path":  "backend/app/services/prompt_builder.py",
+        "lines":  437,
+        "sha256":  "C676C1FC8A270FB8650C82A2B4F5FD0023DB2EC02207405A43144DB533620DC8"
+    },
+    {
+        "path":  "backend/app/services/llm_router.py",
+        "lines":  228,
+        "sha256":  "7DF840433FFA5B71000203CA1F5754660298580C3D6463A03E7CFC60B394E28B"
+    },
+    {
+        "path":  "backend/app/services/tts_service.py",
+        "lines":  943,
+        "sha256":  "A8B54D0B8B4D9507874E37F575E9BAC3DECF96D90500F4BE8077AF1ED61F9BCA"
+    },
+    {
+        "path":  "backend/app/services/translation_service.py",
+        "lines":  233,
+        "sha256":  "FC64B2E5B3203913E3A833F1E4C054AFC4904DB7601339D75CF7B453E7B8372D"
+    },
+    {
+        "path":  "backend/app/services/subtitle_generator.py",
+        "lines":  186,
+        "sha256":  "B566C89B62B3A2988DEB364A80C01F7A875132EDABFF2589654A5CA58AF6A20D"
+    },
+    {
+        "path":  "backend/app/services/video_burner.py",
+        "lines":  259,
+        "sha256":  "5994B7616A057D45C7D1B40D033B90418EFDAAF6081E756303B8B9326300D20B"
+    },
+    {
+        "path":  "backend/app/services/video_downloader.py",
+        "lines":  216,
+        "sha256":  "EE6E6BC29D60E039D57D8D27ABC6F8BE437E418F495036DBAC0FEF786B6C7221"
+    },
+    {
+        "path":  "backend/app/services/workflow_engine.py",
+        "lines":  538,
+        "sha256":  "55A1BA7A3A376BAF3DDF6D99A7482597F5EAC9AEF3A30755ABAE37FD256FE447"
+    },
+    {
+        "path":  "backend/app/services/__init__.py",
+        "lines":  27,
+        "sha256":  "08B7527E4A8DA1C6D1A5182B0FE056540C5675B09C330DF697899BD1561B4979"
+    },
+    {
+        "path":  "backend/app/services/ws_manager.py",
+        "lines":  60,
+        "sha256":  "F6C33D9D4D3C25249C46DF1C575F1A7F54A1AFFD18C002EC6DF017ED7B228F35"
+    },
+    {
+        "path":  "run_full_transcribe_dub.py",
+        "lines":  574,
+        "sha256":  "5EB1DE7CC9289EB4F5242CFDCA20DDBBDBA69FFE911C5EA9F66783900D6EB431"
+    },
+    {
+        "path":  "Architecture.md",
+        "lines":  306,
+        "sha256":  "F8BD7B863D64288F0E5108DB3F874B5B7567A4B35DFC702E88BA5CBB1D7D104D"
+    },
+    {
+        "path":  "Translation_Engine_Specification.md",
+        "lines":  290,
+        "sha256":  "C89228FB5C6C84D29B4F87C525ED4208D9DFD9CE4BB00E77004EBFD6C6633926"
+    },
+    {
+        "path":  "backend/requirements.txt",
+        "lines":  20,
+        "sha256":  "D1C483B3F84B27C51AEB2CB40B526F9BD3CF8BC03887F2DAC8D5D6FB9040FE3A"
+    },
+    {
+        "path":  "backend/pyproject.toml",
+        "lines":  45,
+        "sha256":  "11F5AD6FABC69A2F82D1883142D37ED7AFEBE50E09D4C046215D3DD00F5BE958"
+    },
+    {
+        "path":  "backend/Dockerfile",
+        "lines":  62,
+        "sha256":  "43A23C73A07A00EF9F4EF3503143A62919F7F007C4325987E732AEC43D607604"
+    },
+    {
+        "path":  "frontend/package.json",
+        "lines":  29,
+        "sha256":  "E52F9EA776D33B25050022C72B9B975911D208D5849C91FF315257929C631F7E"
+    },
+    {
+        "path":  "frontend/package-lock.json",
+        "lines":  1701,
+        "sha256":  "0E89D49DD39FD30359E12FEF15DC095BE788305996CDFE807C095220FEAC48F2"
+    },
+    {
+        "path":  "frontend/next.config.mjs",
+        "lines":  24,
+        "sha256":  "F7B514F28B464E92271540A4B956BE090B84FF3AF9A555B8F88D379A7577AAE0"
+    },
+    {
+        "path":  "frontend/Dockerfile",
+        "lines":  44,
+        "sha256":  "B707E2571120F2281B0046B07C9C3D9BB3B081CAE46193653DE3221630866AF8"
+    },
+    {
+        "path":  "frontend/tsconfig.json",
+        "lines":  27,
+        "sha256":  "6C957671079B5D136602E2C7EC3C7228A378BA7200D4CD7C154701AAA6AF1B59"
+    },
+    {
+        "path":  "frontend/tailwind.config.js",
+        "lines":  53,
+        "sha256":  "845D912DD421DC558760F9157A9A32CF2313553BC797E2B5CD1CA9A77809194F"
+    },
+    {
+        "path":  "frontend/postcss.config.js",
+        "lines":  6,
+        "sha256":  "FA650B380ADFABB151A0B352F7135E107E6352345F899060F1C5C231228F94BF"
+    },
+    {
+        "path":  "docker-compose.yml",
+        "lines":  115,
+        "sha256":  "54086AFEE3634317F1742346272180603503D605CE44EEB314B2DC5C5C151D8C"
+    },
+    {
+        "path":  "start_all.bat",
+        "lines":  7,
+        "sha256":  "56304D1DC5DB5285D9EF4F243EB3C33675A71D12EE2BF9276720068E112D79F7"
+    },
+    {
+        "path":  "start_backend.bat",
+        "lines":  11,
+        "sha256":  "24B86BD7A6471633604B0261010C44B6DE4EA629B066656E4C32E1754FFE2741"
+    },
+    {
+        "path":  "start_frontend.bat",
+        "lines":  7,
+        "sha256":  "B81A379C4C2C203C08A7EF636315DA5FC6DAB7DDA7F0C102C84737AC517208F2"
+    },
+    {
+        "path":  ".gitignore",
+        "lines":  83,
+        "sha256":  "51C6442AF8C96AF7D43542D1B72BBE55AEBF5AC0C35EF89BE66511F82852A001"
+    },
+    {
+        "path":  ".dockerignore",
+        "lines":  14,
+        "sha256":  "6766758C5CD6D5B1F756A65D0E5EB435068CD0BE812D8D7CD259015290E3F048"
+    },
+    {
+        "path":  ".env.example",
+        "lines":  174,
+        "sha256":  "F599449188FED8452037072BFC839852F43956BC7113B6CA9386BA7AF2F8D01C"
+    }
+]

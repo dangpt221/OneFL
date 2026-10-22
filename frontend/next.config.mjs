@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const backend = process.env.BACKEND_INTERNAL_URL || 'http://127.0.0.1:8000';
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: false,
@@ -7,15 +8,15 @@ const nextConfig = {
     return [
       {
         source: '/health',
-        destination: 'http://127.0.0.1:8000/health',
+        destination: `${backend}/api/v1/health`,
       },
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*',
+        destination: `${backend}/api/:path*`,
       },
       {
         source: '/static/:path*',
-        destination: 'http://127.0.0.1:8000/static/:path*',
+        destination: `${backend}/static/:path*`,
       },
     ];
   },

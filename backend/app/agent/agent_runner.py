@@ -5,13 +5,16 @@ handling dynamic tool selection, parameter validation, automatic reflection on e
 and trajectory auditing.
 """
 
+import asyncio
+import time
 import json
 import logging
 import re
-from typing import Dict, Any, List, Optional
+from typing import Literal, Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 from app.agent.tools import agent_toolkit
+from app.agent.contracts import AgentDecision, bounded_observation
 from app.services.llm_router import LLMRouter
 
 logger = logging.getLogger(__name__)
@@ -33,6 +36,8 @@ class AgentExecutionResult(BaseModel):
     final_answer: str = Field(..., description="Câu trả lời hoặc kết luận cuối cùng")
     trajectory: List[AgentStep] = Field(default_factory=list, description="Toàn bộ chuỗi suy luận và hành động")
     total_steps: int = Field(0, description="Tổng số bước ReAct đã thực thi")
+    state: Literal['COMPLETED', 'PENDING', 'FAILED'] = 'COMPLETED'
+    jobs: List[Dict[str, Any]] = Field(default_factory=list)
     success: bool = Field(True, description="Trạng thái hoàn thành thành công")
 
 
@@ -120,140 +125,100 @@ class OneFLAgentRunner:
         Returns:
             AgentExecutionResult containing the full trajectory and final answer.
         """
+        if not goal.strip() or len(goal) > 4000 or not 1 <= max_iterations <= 10:
+            raise ValueError('Use a nonempty goal up to 4000 characters and 1–10 iterations')
+        context = dict(context or {})
+        if len(json.dumps(context, allow_nan=False)) > 8000:
+            raise ValueError('Context exceeds 8000 characters; pass project IDs instead of transcripts')
+        from app.services.agent_project_service import owned_project, get_async_session, job_status, verify_artifact
+        project_id = context.get('project_id')
+        expected = context.get('expected_artifact')
+        if expected and (not project_id or expected not in {'burned_video', 'dubbed_video', 'subtitles', 'transcript', 'translated_cues'}):
+            raise ValueError('expected_artifact requires project_id and a supported artifact kind')
+        if project_id:
+            async with get_async_session() as db:
+                await owned_project(db, project_id)
         trajectory: List[AgentStep] = []
-        tools_manifest = self._build_tools_manifest()
-        system_prompt = AGENT_SYSTEM_PROMPT.format(tools_manifest=tools_manifest)
-
-        history_log: List[str] = [
-            f"MỤC TIÊU CỦA NGƯỜI DÙNG: {goal}",
-        ]
-        if context:
-            history_log.append(f"NGỮ CẢNH BỔ SUNG: {json.dumps(context, ensure_ascii=False)}")
-
+        jobs: list[dict[str, Any]] = []
+        unresolved_error = False
+        system_prompt = AGENT_SYSTEM_PROMPT.format(tools_manifest=self._build_tools_manifest())
+        system_prompt += ('\nMedia tools return QUEUED jobs, not completed artifacts. Use wait_for_job/get_job_status. '
+                          'Never claim media completion before a successful job and a current persisted artifact. '
+                          'Use project IDs/paginated context, not full transcripts. Set subtitle preset during export, not burn.')
+        prefix = f'MỤC TIÊU: {goal}\nNGỮ CẢNH: {json.dumps(context, ensure_ascii=False)}'
+        history: list[str] = []
+        deadline = time.monotonic() + 120
         for iteration in range(1, max_iterations + 1):
-            user_prompt = "\n\n".join(history_log) + f"\n\nBƯỚC HIỆN TẠI: Bước {iteration}/{max_iterations}. Hãy suy luận và đưa ra quyết định dạng JSON."
-
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
-                raw_response = await self.llm_router.generate_completion(
+                raw = await asyncio.wait_for(self.llm_router.generate_completion(
                     system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    temperature=0.2
-                )
-            except Exception as llm_err:
-                logger.warning(f"LLM call failed during Agent ReAct step {iteration}: {llm_err}")
-                # Handle gracefully when LLM API keys are missing or offline
-                err_step = AgentStep(
-                    step_index=iteration,
-                    thought=f"Không thể kết nối LLM service: {llm_err}. Kích hoạt chế độ cứu cánh.",
-                    action=None,
-                    action_input=None,
-                    observation=str(llm_err),
-                    is_error=True
-                )
-                trajectory.append(err_step)
-                return AgentExecutionResult(
-                    goal=goal,
-                    final_answer=f"Lỗi kết nối LLM: {llm_err}. Vui lòng cấu hình GEMINI_API_KEY hoặc OPENAI_API_KEY để kích hoạt tính năng Agent tự trị.",
-                    trajectory=trajectory,
-                    total_steps=iteration,
-                    success=False
-                )
-
-            cleaned_json = self._clean_json_text(raw_response)
+                    user_prompt=prefix + '\n' + '\n'.join(history)[-20000:] + f'\nBƯỚC {iteration}/{max_iterations}',
+                    temperature=0.2), timeout=min(60, remaining))
+            except Exception as error:
+                logger.warning('Agent provider failed: %s', error)
+                trajectory.append(AgentStep(step_index=iteration, thought='Provider failed', observation=str(error)[:1500], is_error=True))
+                return AgentExecutionResult(goal=goal, final_answer='LLM provider failed; no completion verified.',
+                    trajectory=trajectory, total_steps=len(trajectory), success=False, state='FAILED', jobs=jobs)
             try:
-                parsed = json.loads(cleaned_json)
-            except Exception as parse_err:
-                logger.warning(f"JSON parsing error from LLM response: {parse_err}. Response was: {raw_response[:200]}")
-                step = AgentStep(
-                    step_index=iteration,
-                    thought="Phản hồi từ LLM không đúng định dạng JSON chuẩn. Yêu cầu LLM thử lại.",
-                    action=None,
-                    action_input=None,
-                    observation=f"JSON parse error: {parse_err}. Raw text: {raw_response[:200]}",
-                    is_error=True
-                )
-                trajectory.append(step)
-                history_log.append(f"Observation (Bước {iteration}): Phản hồi không phải JSON hợp lệ. Vui lòng CHỈ trả về đúng JSON theo hướng dẫn.")
+                decision = AgentDecision.model_validate_json(self._clean_json_text(raw))
+            except (ValueError, TypeError, AttributeError) as error:
+                observation = 'Invalid decision structure: ' + str(error)[:1500]
+                trajectory.append(AgentStep(step_index=iteration, thought='Validate response and retry', observation=observation, is_error=True))
+                history.append(observation + '. Return exactly one valid action or final_answer JSON object.')
                 continue
-
-            thought = parsed.get("thought", "Không có suy luận cụ thể.")
-            final_answer = parsed.get("final_answer")
-
-            # Check if Agent provided a final answer
-            if final_answer:
-                step = AgentStep(
-                    step_index=iteration,
-                    thought=thought,
-                    action=None,
-                    action_input=None,
-                    observation="Nhiệm vụ hoàn thành.",
-                    is_error=False
-                )
-                trajectory.append(step)
-                return AgentExecutionResult(
-                    goal=goal,
-                    final_answer=final_answer,
-                    trajectory=trajectory,
-                    total_steps=iteration,
-                    success=True
-                )
-
-            # Otherwise, an action is expected
-            action = parsed.get("action")
-            action_input = parsed.get("action_input", {})
-
-            if not action:
-                step = AgentStep(
-                    step_index=iteration,
-                    thought=thought,
-                    action=None,
-                    action_input=None,
-                    observation="LLM không chỉ định action hoặc final_answer hợp lệ.",
-                    is_error=True
-                )
-                trajectory.append(step)
-                history_log.append(f"Observation (Bước {iteration}): Thiếu trường 'action' hoặc 'final_answer' trong JSON.")
-                continue
-
-            # Execute tool with automatic error capturing & reflection
+            if decision.final_answer:
+                pending, failed = False, unresolved_error
+                verified_jobs = []
+                for submitted in jobs:
+                    state = await job_status(submitted)
+                    verified_jobs.append(bounded_observation(state))
+                    pending |= state['status'] in {'QUEUED', 'RUNNING'}
+                    failed |= state['status'] in {'FAILED', 'CANCELLED'}
+                    if state['status'] == 'SUCCEEDED' and submitted.get('expected_artifact'):
+                        failed |= not await verify_artifact(submitted['project_id'], submitted['expected_artifact'])
+                if expected and not pending:
+                    failed |= not await verify_artifact(project_id, expected)
+                completion = 'FAILED' if failed else 'PENDING' if pending else 'COMPLETED'
+                answer = decision.final_answer if completion == 'COMPLETED' else (
+                    'Jobs are queued or running; inspect job status before claiming completion.' if completion == 'PENDING'
+                    else 'Completion was not verified; inspect tool/job errors and retry.')
+                trajectory.append(AgentStep(step_index=iteration, thought=decision.thought,
+                    observation={'state': completion}, is_error=failed))
+                return AgentExecutionResult(goal=goal, final_answer=answer, trajectory=trajectory,
+                    total_steps=len(trajectory), success=completion == 'COMPLETED', state=completion, jobs=verified_jobs)
+            arguments = dict(decision.action_input)
+            tool = self.toolkit.get_tool(decision.action)
+            if project_id and tool and 'project_id' in tool.input_model.model_fields:
+                if arguments.get('project_id', project_id) != project_id:
+                    arguments['project_id'] = '__context_project_mismatch__'
+                else:
+                    arguments['project_id'] = project_id
             try:
-                tool_result = await self.toolkit.execute(action, action_input)
-                obs_summary = json.dumps(tool_result, ensure_ascii=False)
-                step = AgentStep(
-                    step_index=iteration,
-                    thought=thought,
-                    action=action,
-                    action_input=action_input,
-                    observation=tool_result,
-                    is_error=False
-                )
-                trajectory.append(step)
-                history_log.append(f"Action (Bước {iteration}): {action}({json.dumps(action_input, ensure_ascii=False)})\nObservation: {obs_summary}")
-            except Exception as exec_err:
-                logger.error(f"Error executing tool '{action}': {exec_err}")
-                step = AgentStep(
-                    step_index=iteration,
-                    thought=thought,
-                    action=action,
-                    action_input=action_input,
-                    observation=f"ERROR: {str(exec_err)}",
-                    is_error=True
-                )
-                trajectory.append(step)
-                history_log.append(
-                    f"Action (Bước {iteration}): {action}\n"
-                    f"Observation (ERROR): Thực thi công cụ thất bại: {exec_err}. "
-                    f"Hãy tự phản tỉnh (Reflection), kiểm tra lại kiểu dữ liệu và tham số của công cụ, sau đó thử lại."
-                )
-
-        # If loop ended without explicit final_answer
-        return AgentExecutionResult(
-            goal=goal,
-            final_answer="Đã đạt giới hạn số bước ReAct (max_iterations) mà chưa thể hoàn thành toàn bộ mục tiêu.",
-            trajectory=trajectory,
-            total_steps=max_iterations,
-            success=False
-        )
+                if arguments.get('project_id') == '__context_project_mismatch__':
+                    raise ValueError('Action project_id differs from the bound context')
+                result = await asyncio.wait_for(self.toolkit.execute(decision.action, arguments),
+                    timeout=max(.01, min(45, deadline - time.monotonic())))
+                observation = bounded_observation(result)
+                unresolved_error = not result.get('success', True)
+                if result.get('status') == 'QUEUED' and result.get('job_id'):
+                    kind = {'burn_video_subtitles': 'burned_video', 'dub_project_video': 'dubbed_video',
+                            'extract_and_transcribe_audio': 'transcript', 'start_project_pipeline': 'translated_cues'}.get(decision.action)
+                    jobs.append({'project_id': result['project_id'], 'job_id': result['job_id'], 'expected_artifact': kind})
+                trajectory.append(AgentStep(step_index=iteration, thought=decision.thought, action=decision.action,
+                    action_input=bounded_observation(arguments), observation=observation, is_error=unresolved_error))
+                history.append(f'Action: {decision.action}\nObservation: {json.dumps(observation, ensure_ascii=False)[:6000]}')
+            except Exception as error:
+                logger.warning('Agent tool %s failed: %s', decision.action, error)
+                unresolved_error = True
+                observation = str(error)[:1500]
+                trajectory.append(AgentStep(step_index=iteration, thought=decision.thought, action=decision.action,
+                    action_input=bounded_observation(arguments), observation=observation, is_error=True))
+                history.append(f'Action: {decision.action} ERROR: {observation}. Correct arguments or use a different valid tool.')
+        return AgentExecutionResult(goal=goal, final_answer='Iteration/time budget reached; completion not verified.',
+            trajectory=trajectory, total_steps=len(trajectory), success=False, state='PENDING' if jobs and not unresolved_error else 'FAILED', jobs=jobs)
 
 
 agent_runner = OneFLAgentRunner()

@@ -544,7 +544,14 @@ def generate_terms():
         if len([t for t in terms if t['source_lang'] == 'ko']) >= 210:
             break
 
-    return terms
+    import re
+    # Synthetic numeric suffixes are not genuine lexical entries.
+    unique = {}
+    for term in terms:
+        if re.search(r'(?:_\d+| #\d+)$', term['source_term']):
+            continue
+        unique.setdefault((term['source_lang'], term['source_term']), term)
+    return list(unique.values())
 
 def main():
     terms = generate_terms()

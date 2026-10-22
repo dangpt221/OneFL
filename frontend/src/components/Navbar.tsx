@@ -24,8 +24,8 @@ export default function Navbar() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-6 py-3.5 shadow-sm">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3.5 shadow-sm">
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
@@ -41,7 +41,7 @@ export default function Navbar() {
         </Link>
 
         {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+        <nav className="order-3 basis-full justify-center sm:order-none sm:basis-auto flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
           <Link
             href="/"
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
@@ -70,12 +70,12 @@ export default function Navbar() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 shadow-xs">
             <span className={`w-2 h-2 rounded-full ${isBackendHealthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-            <span>FastAPI: {isBackendHealthy ? 'Online' : 'Connecting...'}</span>
+            <span>API: {isBackendHealthy ? 'Online' : 'Connecting...'}</span>
           </div>
 
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 text-xs font-medium text-indigo-700">
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Gemini 2.5 Flash + GPT-4o</span>
+            <span>Gemini / OpenAI</span>
           </div>
         </div>
       </div>

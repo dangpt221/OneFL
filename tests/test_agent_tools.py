@@ -21,6 +21,8 @@ EXPECTED_TOOLS = [
     "export_subtitles",
     "generate_dubbing_audio",
     "burn_video_subtitles",
+    "get_project_context", "start_project_pipeline", "dub_project_video",
+    "get_job_status", "wait_for_job", "cancel_project_job",
 ]
 
 
@@ -28,7 +30,7 @@ def test_agent_toolkit_registration():
     """Verify that all 10 tools are registered in AgentToolkit."""
     tools = agent_toolkit.list_tools()
     tool_names = [t.name for t in tools]
-    assert len(tools) == 10
+    assert len(tools) == len(EXPECTED_TOOLS)
     for expected in EXPECTED_TOOLS:
         assert expected in tool_names, f"Tool {expected} must be registered"
 
@@ -123,12 +125,8 @@ async def test_export_subtitles_tool():
 @pytest.mark.asyncio
 async def test_inspect_video_media_missing_file():
     """Verify inspect_video_media graceful error handling when file is not found."""
-    res = await agent_toolkit.execute(
-        "inspect_video_media",
-        {"video_path": "non_existent_video_file_12345.mp4"}
-    )
-    assert res["status"] == "ERROR"
-    assert "không tồn tại" in res["error"]
+    with pytest.raises(FileNotFoundError):
+        await agent_toolkit.execute('inspect_video_media', {'video_path': 'non_existent_video_file_12345.mp4'})
 
 
 @pytest.mark.asyncio
@@ -172,7 +170,7 @@ def test_agent_api_endpoints():
     resp = client.get("/api/v1/agent/tools")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["total_tools"] == 10
+    assert data["total_tools"] == len(EXPECTED_TOOLS)
     names = [t["name"] for t in data["tools"]]
     assert "inspect_video_media" in names
     assert "query_master_glossary" in names

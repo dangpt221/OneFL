@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+.next
+__pycache__
+.pytest_cache
+*.db
+*.db-*
+*.log
+*.mp3
+*.mp4
+.env*
+tests

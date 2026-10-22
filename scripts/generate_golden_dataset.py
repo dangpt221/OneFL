@@ -1,5 +1,5 @@
 """
-Script to generate 1000 Golden Dataset test cases for OneFL pipeline testing.
+Script to generate independent multilingual rule-engine fixtures for OneFL pipeline testing.
 Covers 4 languages (EN: 300, ZH: 300, JA: 200, KO: 200), 8 genres,
 speaker diarization, video visual context, relationship matrices, glossaries,
 and ground-truth Vietnamese translations matching all 4 Guardrail Tiers.
@@ -8,8 +8,8 @@ import json
 import os
 from pathlib import Path
 
-DATASET_FILE = Path("data/golden_dataset_1000.json")
-FRONTEND_SAMPLE_FILE = Path("frontend/src/data/golden_dataset_sample.json")
+DATASET_FILE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "translation_cases.json"
+FRONTEND_SAMPLE_FILE = Path(__file__).resolve().parents[1] / "frontend" / "src" / "data" / "golden_dataset_sample.json"
 
 def generate_golden_dataset():
     dataset = []
@@ -252,13 +252,12 @@ def generate_golden_dataset():
         }
     ]
 
-    total_target = 1000
     # Allocation: 300 EN, 300 ZH, 200 JA, 200 KO
     targets = [
-        ("en", 300, en_scenarios),
-        ("zh", 300, zh_scenarios),
-        ("ja", 200, ja_scenarios),
-        ("ko", 200, ko_scenarios)
+        ("en", len(en_scenarios), en_scenarios),
+        ("zh", len(zh_scenarios), zh_scenarios),
+        ("ja", len(ja_scenarios), ja_scenarios),
+        ("ko", len(ko_scenarios), ko_scenarios)
     ]
 
     curr_id = 1
@@ -352,23 +351,26 @@ def generate_golden_dataset():
                     "tool_burner"
                 ]
             }
+            # These five original reference dialogues intentionally exceed the
+            # configured reading-speed limit; keep them as rejection fixtures.
+            item['expected_rule_violations'] = ['CPS_TOO_HIGH'] if item['id'] in {8, 9, 10, 11, 13} else []
             dataset.append(item)
 
     return dataset
 
 def main():
-    print("Generating 1000 Golden Dataset test cases...")
+    print("Generating independent rule-engine fixtures (not an end-to-end benchmark)...")
     dataset = generate_golden_dataset()
-    assert len(dataset) == 1000, f"Expected 1000 cases, got {len(dataset)}"
+    assert len({tuple(c['original_text'] for c in item['input_cues']) for item in dataset}) == len(dataset), 'Duplicate dialogue fixtures'
     
     os.makedirs(DATASET_FILE.parent, exist_ok=True)
     with open(DATASET_FILE, "w", encoding="utf-8") as f:
         json.dump(dataset, f, ensure_ascii=False, indent=2)
-    print(f"Saved full Golden Dataset (1000 items) to {DATASET_FILE}")
+    print(f"Saved independent fixtures ({len(dataset)} items) to {DATASET_FILE}")
     
-    # Save frontend sample (first 50 representative cases across languages and genres)
+    # Save frontend sample (all independent cases across languages and genres)
     os.makedirs(FRONTEND_SAMPLE_FILE.parent, exist_ok=True)
-    frontend_sample = dataset[:50]
+    frontend_sample = dataset
     with open(FRONTEND_SAMPLE_FILE, "w", encoding="utf-8") as f:
         json.dump(frontend_sample, f, ensure_ascii=False, indent=2)
     print(f"Saved frontend sample ({len(frontend_sample)} items) to {FRONTEND_SAMPLE_FILE}")

@@ -1,0 +1,13 @@
+﻿{
+  "reproduced": 2,
+  "results": [
+    {
+      "component": "frontend/src/components/CreateProjectModal.tsx",
+      "error": "Rendered more hooks than during the previous render"
+    },
+    {
+      "component": "frontend/src/components/GlossaryModal.tsx",
+      "error": "Rendered more hooks than during the previous render"
+    }
+  ]
+}

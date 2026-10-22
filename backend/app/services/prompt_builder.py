@@ -342,7 +342,7 @@ Nhiệm vụ: Dịch danh sách phụ đề video từ ngôn ngữ [{source_lang
 
 {cls.get_language_specific_rules(source_lang)}
 
-{cls.get_video_grounded_translation_rules()}
+{cls.get_video_grounded_translation_rules() if video_context else "Visual context is unavailable. Do not invent visual actions, emotions, objects or identities from text alone."}
 
 {cls.get_semantic_nuance_rules()}
 

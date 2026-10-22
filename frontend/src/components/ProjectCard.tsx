@@ -37,6 +37,10 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
             Ready for Review
           </span>
         );
+      case 'QUEUED':
+        return <span className="text-xs rounded-full bg-indigo-50 px-2.5 py-1 text-indigo-700">Chờ xử lý</span>;
+      case 'CANCELLED':
+        return <span className="text-xs rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">Đã dừng</span>;
       case 'PROCESSING':
       case 'INGESTING':
       case 'ASR_PROCESSING':

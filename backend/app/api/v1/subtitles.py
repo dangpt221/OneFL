@@ -1,8 +1,12 @@
+from app.services.project_changes import commit_project_changes
 import logging
+from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
+from app.services.artifact_service import invalidate_artifacts
+from app.services.job_service import job_service
 
 from app.database import get_db
 from app.models.project import Project
@@ -31,11 +35,9 @@ async def sync_subtitles_on_disk(project_id: str, db: AsyncSession):
             return
 
         cues_res = await db.execute(
-            select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.cue_index)
+            select(SubtitleCue).where(SubtitleCue.project_id == project_id).order_by(SubtitleCue.start_time, SubtitleCue.cue_index)
         )
         cues = cues_res.scalars().all()
-        if not cues:
-            return
 
         cues_data = [
             {
@@ -66,7 +68,8 @@ async def sync_subtitles_on_disk(project_id: str, db: AsyncSession):
         project.subtitles_srt_path = str(srt_path)
         await db.commit()
     except Exception as e:
-        logger.warning(f"Failed to auto-sync subtitle files on disk for project {project_id}: {e}")
+        logger.exception("Subtitle synchronization failed for %s", project_id)
+        raise
 
 
 
@@ -82,7 +85,7 @@ async def get_project_subtitles(
     stmt = select(SubtitleCue).where(SubtitleCue.project_id == project_id)
     if speaker_tag:
         stmt = stmt.where(SubtitleCue.speaker_tag == speaker_tag)
-    stmt = stmt.order_by(SubtitleCue.cue_index).offset(skip)
+    stmt = stmt.order_by(SubtitleCue.start_time, SubtitleCue.cue_index).offset(skip)
     if limit is not None:
         stmt = stmt.limit(limit)
 
@@ -103,7 +106,13 @@ async def create_subtitle_cue(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new subtitle cue entry."""
-    duration = max(0.1, data.end_time - data.start_time)
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, 'Project not found')
+    if await db.scalar(select(func.count(SubtitleCue.id)).where(SubtitleCue.project_id == project_id, SubtitleCue.cue_index == data.cue_index)):
+        raise HTTPException(409, 'Cue index already exists in this project')
+    invalidate_artifacts(project, audio=True)
+    duration = data.end_time - data.start_time
     text = data.translated_text or data.original_text
     cps = SubtitleGuardrails.calculate_cps(text, duration)
     lines = text.split("\n")
@@ -123,8 +132,10 @@ async def create_subtitle_cue(
         is_edited=False
     )
     db.add(cue)
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     await db.refresh(cue)
+    await sync_subtitles_on_disk(project_id, db)
+    await ws_manager.broadcast_to_project(project_id, "CUES_CHANGED", {})
     return cue
 
 
@@ -164,8 +175,12 @@ async def delete_subtitle_cue(
     if not cue:
         raise HTTPException(status_code=404, detail="Subtitle cue not found")
 
+    project = await db.get(Project, project_id)
+    invalidate_artifacts(project, audio=True)
     await db.delete(cue)
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
+    await sync_subtitles_on_disk(project_id, db)
+    await ws_manager.broadcast_to_project(project_id, 'CUES_CHANGED', {})
     return {"success": True, "message": f"Cue {cue_id} deleted"}
 
 
@@ -188,6 +203,13 @@ async def update_subtitle_cue(
         raise HTTPException(status_code=404, detail="Subtitle cue not found")
 
     update_dict = data.model_dump(exclude_unset=True)
+    if update_dict.get('end_time', cue.end_time) <= update_dict.get('start_time', cue.start_time):
+        raise HTTPException(422, 'end_time must be greater than start_time')
+    project = await db.get(Project, project_id)
+    if ({'start_time', 'end_time'} & update_dict.keys()) and project.video_duration_seconds:
+        if update_dict.get('end_time', cue.end_time) > project.video_duration_seconds:
+            raise HTTPException(422, 'Subtitle timing must stay within the source video duration')
+    invalidate_artifacts(project, audio=True)
     for k, v in update_dict.items():
         setattr(cue, k, v)
 
@@ -200,7 +222,7 @@ async def update_subtitle_cue(
     cue.max_line_length = max(len(l) for l in lines) if lines else 0
     cue.is_edited = True
 
-    await db.commit()
+    await commit_project_changes(db, project_id, invalidate_audio=True)
     await db.refresh(cue)
 
     # Auto-synchronize disk subtitle files (subtitles.ass / subtitles.srt)
@@ -217,8 +239,7 @@ async def update_subtitle_cue(
 
 
 
-@router.post("/retranslate", response_model=List[SubtitleCueResponse])
-async def retranslate_cues(
+async def _retranslate_cues(
     project_id: str,
     req: RetranslateRequest,
     db: AsyncSession = Depends(get_db)
@@ -233,14 +254,14 @@ async def retranslate_cues(
         cues_res = await db.execute(
             select(SubtitleCue).where(
                 SubtitleCue.project_id == project_id
-            ).order_by(SubtitleCue.cue_index)
+            ).order_by(SubtitleCue.start_time, SubtitleCue.cue_index)
         )
     else:
         cues_res = await db.execute(
             select(SubtitleCue).where(
                 SubtitleCue.project_id == project_id,
                 SubtitleCue.id.in_(req.cue_ids)
-            ).order_by(SubtitleCue.cue_index)
+            ).order_by(SubtitleCue.start_time, SubtitleCue.cue_index)
         )
     cues = cues_res.scalars().all()
     if not cues:
@@ -278,7 +299,7 @@ async def retranslate_cues(
         {
             "source_term": g.source_term,
             "target_term": g.target_term,
-            "context_note": g.context_note
+            "priority": g.priority, "case_sensitive": g.case_sensitive, "context_note": g.context_note
         }
         for g in glo_res.scalars().all()
     ]
@@ -302,7 +323,10 @@ async def retranslate_cues(
         speaker_profiles=speakers,
         relationship_matrix=rels,
         glossary=glossary,
-        custom_instructions=req.custom_instruction
+        custom_instructions=req.custom_instruction,
+        force_reprocess=True, preserve_edited=False,
+        model_override=req.model_override, temperature=req.temperature,
+        video_path=Path(project.local_video_path) if project.local_video_path else None,
     )
 
     res_map = {r["cue_index"]: r for r in results}
@@ -314,10 +338,14 @@ async def retranslate_cues(
             c.cps = t.get("cps", 0.0)
             c.line_count = t.get("line_count", 1)
             c.max_line_length = t.get("max_line_length", 0)
+            c.has_guardrail_violation = t.get('has_guardrail_violation', False)
+            c.violation_notes = t.get('violation_notes')
             c.is_edited = True
             updated_items.append(c)
 
-    await db.commit()
+    invalidate_artifacts(project, audio=True)
+    project.status, project.current_stage = "WAITING_REVIEW", "WAITING_REVIEW"
+    await commit_project_changes(db, project_id, invalidate_audio=True, allow_active_job=True)
     # Auto-synchronize disk subtitle files
     await sync_subtitles_on_disk(project_id, db)
     return updated_items
@@ -336,7 +364,7 @@ async def export_subtitles(
     cues_res = await db.execute(
         select(SubtitleCue)
         .where(SubtitleCue.project_id == project_id)
-        .order_by(SubtitleCue.cue_index)
+        .order_by(SubtitleCue.start_time, SubtitleCue.cue_index)
     )
     cues = cues_res.scalars().all()
     cues_data = [
@@ -371,3 +399,11 @@ async def export_subtitles(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@router.post('/retranslate', status_code=202)
+async def retranslate_cues(project_id: str, req: RetranslateRequest, db: AsyncSession = Depends(get_db)):
+    if not await db.get(Project, project_id):
+        raise HTTPException(404, 'Project not found')
+    job = await job_service.enqueue(db, project_id, 'RETRANSLATE', req.model_dump())
+    return {'success': True, 'job_id': job.id, 'status': 'QUEUED'}

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Index, CheckConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -11,6 +11,10 @@ def utcnow():
 
 class SubtitleCue(Base):
     __tablename__ = "subtitle_cues"
+    __table_args__ = (
+        Index('uq_subtitle_project_cue', 'project_id', 'cue_index', unique=True),
+        CheckConstraint('cue_index > 0 AND start_time >= 0 AND end_time > start_time', name='ck_subtitle_timing'),
+    )
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)

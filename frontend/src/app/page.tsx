@@ -1,37 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Plus, Video, Sparkles, Filter, Search, Loader2, PlayCircle, Zap, ShieldCheck, Cpu } from 'lucide-react';
 import { Project } from '@/lib/types';
+import { isProjectBusy } from '@/lib/projectView';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api';
 import ProjectCard from '@/components/ProjectCard';
 import CreateProjectModal from '@/components/CreateProjectModal';
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const data = await api.listProjects();
       setProjects(data.items);
+      setLoadError('');
     } catch (e) {
-      console.error('Failed to load projects', e);
+      setLoadError(e instanceof Error ? e.message : 'Không tải được danh sách dự án');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
+  useEffect(() => { void fetchProjects(); }, [fetchProjects]);
+  const hasActiveProjects = projects.some(p => isProjectBusy(p));
   useEffect(() => {
-    fetchProjects();
-    const hasActiveProjects = projects.some(p => ['PROCESSING', 'INGESTING', 'ASR_PROCESSING', 'SPEAKER_PROFILING', 'TRANSLATING', 'BURNING', 'DUBBING'].includes(p.status));
     const intervalTime = hasActiveProjects ? 1500 : 5000;
     const interval = setInterval(fetchProjects, intervalTime);
     return () => clearInterval(interval);
-  }, [projects]);
+  }, [fetchProjects, hasActiveProjects]);
 
   const handleDeleteProject = async (id: string) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
@@ -39,7 +43,7 @@ export default function DashboardPage() {
       await api.deleteProject(id);
       fetchProjects();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không xóa được dự án');
     }
   };
 
@@ -47,14 +51,14 @@ export default function DashboardPage() {
     const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     if (statusFilter === 'ALL') return true;
-    if (statusFilter === 'PROCESSING') return ['PROCESSING', 'INGESTING', 'ASR_PROCESSING', 'TRANSLATING', 'BURNING'].includes(p.status);
+    if (statusFilter === 'PROCESSING') return isProjectBusy(p);
     if (statusFilter === 'REVIEW') return p.status === 'WAITING_REVIEW';
     if (statusFilter === 'COMPLETED') return p.status === 'COMPLETED';
     return true;
   });
 
   const totalCount = projects.length;
-  const processingCount = projects.filter(p => ['PROCESSING', 'INGESTING', 'ASR_PROCESSING', 'SPEAKER_PROFILING', 'TRANSLATING', 'BURNING', 'DUBBING'].includes(p.status)).length;
+  const processingCount = projects.filter(p => isProjectBusy(p)).length;
   const reviewCount = projects.filter(p => p.status === 'WAITING_REVIEW').length;
   const completedCount = projects.filter(p => p.status === 'COMPLETED').length;
 
@@ -83,6 +87,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
+      {loadError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{loadError}</p>}
       {/* Hero Header & Quick Bilibili Bar */}
       <div className="relative rounded-3xl p-7 lg:p-9 overflow-hidden bg-white border border-slate-200/90 shadow-sm">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-indigo-100/50 via-cyan-50/40 to-transparent rounded-full blur-3xl pointer-events-none -z-0" />
@@ -90,7 +95,7 @@ export default function DashboardPage() {
         <div className="relative z-10 max-w-4xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Dual-Engine AI: Google Gemini 2.5 Flash + OpenAI GPT-4o & TTS Nova</span>
+            <span>Dịch phụ đề, duyệt nội dung và lồng tiếng AI</span>
           </div>
 
           <h1 className="font-heading font-extrabold text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight leading-tight">
@@ -98,7 +103,7 @@ export default function DashboardPage() {
           </h1>
 
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl font-normal">
-            Tự động tải video từ Bilibili, phân tích giọng nói (WhisperX + Diarization), dịch thuật ngữ cảnh với ma trận xưng hô nhân vật và lồng tiếng tự nhiên bằng giọng <strong>🌸 Nova</strong>.
+            Tự động tải video từ Bilibili, phân tích giọng nói (Faster-Whisper, tùy chọn tách người nói), dịch thuật ngữ cảnh với ma trận xưng hô nhân vật và lồng tiếng tự nhiên bằng giọng <strong>🌸 Nova</strong>.
           </p>
 
           {/* Instant Bilibili URL Bar & Primary Action */}

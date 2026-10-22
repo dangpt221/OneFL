@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { X, UploadCloud, Video, Sparkles, Loader2, FileCheck, Link as LinkIcon, Globe, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -30,6 +30,9 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const uploadProjectRef = useRef<{ fingerprint: string; id: string } | null>(null);
+  const inspectRequestRef = useRef(0);
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,7 +55,9 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     setErrorMessage(null);
 
     try {
+      const requestId = ++inspectRequestRef.current;
       const info = await api.inspectUrlInfo(trimmed);
+      if (requestId !== inspectRequestRef.current) return;
       if (info && info.success) {
         setUrlInfo(info);
         if (!title || title === 'Bilibili Video') {
@@ -69,8 +74,6 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     }
   };
 
-  const [uploadProgress, setUploadProgress] = useState(0);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -82,7 +85,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         return;
       }
     } else {
-      if (!title.trim() && !selectedFile) {
+      if (!selectedFile) {
         setErrorMessage('Vui lòng nhập tên dự án hoặc chọn file video');
         return;
       }
@@ -104,13 +107,17 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         toast.success('Dự án từ Bilibili đã được tạo thành công!');
         onClose();
       } else {
-        const project = await api.createProject({
+        const fingerprint = `${selectedFile?.name}:${selectedFile?.size}:${selectedFile?.lastModified}`;
+        const project = uploadProjectRef.current?.fingerprint === fingerprint
+          ? { id: uploadProjectRef.current.id }
+          : await api.createProject({
           title: title || selectedFile?.name?.replace(/\.[^/.]+$/, '') || 'Video Project',
           description,
           source_language: sourceLanguage,
           target_language: targetLanguage,
         });
 
+        uploadProjectRef.current = { fingerprint, id: project.id };
         if (selectedFile) {
           await api.uploadVideo(project.id, selectedFile, autoStart, (progress) => {
             setUploadProgress(progress);
@@ -120,6 +127,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         }
 
         onSuccess(project.id);
+        uploadProjectRef.current = null;
         toast.success('Khởi tạo dự án thành công!');
         onClose();
       }
@@ -134,10 +142,10 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+    <div role="dialog" aria-modal="true" aria-label="Tạo dự án" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white w-full max-w-xl rounded-3xl p-6 relative border border-slate-200 shadow-2xl">
         {/* Close Button */}
-        <button
+        <button aria-label="Đóng"
           onClick={onClose}
           className="absolute right-5 top-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >
@@ -207,7 +215,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
                     value={videoUrl}
                     onChange={(e) => {
                       setVideoUrl(e.target.value);
-                      handleUrlBlurOrPaste(e.target.value);
+
                     }}
                     onBlur={(e) => handleUrlBlurOrPaste(e.target.value)}
                     placeholder="https://www.bilibili.com/video/BV1... hoặc b23.tv/..."

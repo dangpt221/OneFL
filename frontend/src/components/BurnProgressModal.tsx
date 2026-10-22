@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Flame, CheckCircle2, Loader2, Video, FileText } from 'lucide-react';
 import { Project } from '@/lib/types';
+import { isProjectBusy } from '@/lib/projectView';
 import { api } from '@/lib/api';
 import { getFriendlyStageName } from '@/components/PipelineProgressTracker';
 
@@ -17,7 +18,7 @@ interface BurnProgressModalProps {
     clean_chinese_mode?: string;
     top_mask_pct?: number;
     bottom_mask_pct?: number;
-  }) => void;
+  }) => Promise<void>;
   cuesCount?: number;
 }
 
@@ -34,31 +35,46 @@ export default function BurnProgressModal({
   const [cleanChineseMode, setCleanChineseMode] = useState<string>(
     existingCfg.clean_chinese_mode || (existingCfg.mask_original_sub !== false ? 'cinema_bars' : 'none')
   );
-  const [topMaskPct, setTopMaskPct] = useState<number>(existingCfg.top_mask_pct || 11);
-  const [bottomMaskPct, setBottomMaskPct] = useState<number>(existingCfg.bottom_mask_pct || 16);
+  const [topMaskPct, setTopMaskPct] = useState<number>(existingCfg.top_mask_pct ?? 11);
+  const [bottomMaskPct, setBottomMaskPct] = useState<number>(existingCfg.bottom_mask_pct ?? 15);
   const [showAdvancedMask, setShowAdvancedMask] = useState<boolean>(false);
 
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [configureAgain, setConfigureAgain] = useState(false);
+  useEffect(() => {
+    if (isOpen) {
+      const cfg = project.settings_override || {};
+      setSubtitlePreset(cfg.subtitle_preset || 'cinema'); setBilingual(cfg.bilingual ?? false);
+      setCleanChineseMode(cfg.clean_chinese_mode || (cfg.mask_original_sub === false ? 'none' : 'cinema_bars'));
+      setTopMaskPct(cfg.top_mask_pct ?? 11); setBottomMaskPct(cfg.bottom_mask_pct ?? 15);
+      setError(''); setConfigureAgain(false);
+    }
+  }, [isOpen, project.id]);
+  useEffect(() => { if (project.status === 'COMPLETED') setConfigureAgain(false); }, [project.burned_video_url]);
   if (!isOpen) return null;
 
-  const isBurning = project.status === 'BURNING';
-  const isCompleted = project.status === 'COMPLETED' && !!project.burned_video_url;
+  const isBurning = isProjectBusy(project) || submitting;
+  const isCompleted = project.status === 'COMPLETED' && !!project.burned_video_url && !configureAgain;
 
-  const handleStart = () => {
-    onBurnStarted({
+  const handleStart = async () => {
+    setSubmitting(true); setError('');
+    try { await onBurnStarted({
       subtitle_preset: subtitlePreset,
       bilingual: bilingual,
       mask_original_sub: cleanChineseMode !== 'none',
       clean_chinese_mode: cleanChineseMode,
       top_mask_pct: topMaskPct,
       bottom_mask_pct: bottomMaskPct,
-    });
+    }); } catch (error) { setError(error instanceof Error ? error.message : 'Không tạo được job render'); }
+    finally { setSubmitting(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+    <div role="dialog" aria-modal="true" aria-label="Burn Video" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white w-full max-w-lg rounded-3xl p-6 relative border border-slate-200 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
-        <button
+        <button aria-label="Đóng"
           onClick={onClose}
           className="absolute right-5 top-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
         >
@@ -100,6 +116,7 @@ export default function BurnProgressModal({
           </div>
         </div>
 
+        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
         {/* Burn Style & Presentation Customizer (Only shown before burning starts) */}
         {!isBurning && !isCompleted && (
           <div className="space-y-4 pt-1">
@@ -110,10 +127,10 @@ export default function BurnProgressModal({
                   <span className="text-base">🛡️</span>
                   <div>
                     <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                      Xóa Toàn Bộ Chữ Tiếng Trung Ra Khỏi Video
+                      Che phụ đề và logo gốc
                     </h4>
                     <p className="text-[11px] text-amber-800/80">
-                      Che logo Bilibili, chữ bản quyền góc trên và xóa sạch 100% phụ đề tiếng Trung ở đáy.
+                      Chọn vùng che phù hợp; kiểm tra nội dung trước khi xuất video.
                     </p>
                   </div>
                 </div>
@@ -121,6 +138,10 @@ export default function BurnProgressModal({
 
               {/* Modes Selection Grid */}
               <div className="grid grid-cols-2 gap-2 pt-1">
+                <button type="button" onClick={() => setCleanChineseMode('none')}
+                  className={`p-2.5 rounded-xl border text-left text-xs ${cleanChineseMode === 'none' ? 'border-amber-600 bg-white ring-2 ring-amber-500/20' : 'border-amber-200 bg-white/70'}`}>
+                  Không Che (Giữ khung hình gốc)
+                </button>
                 <button
                   type="button"
                   onClick={() => setCleanChineseMode('cinema_bars')}
@@ -205,8 +226,8 @@ export default function BurnProgressModal({
                         </div>
                         <input
                           type="range"
-                          min={10}
-                          max={24}
+                          min={0}
+                          max={35}
                           step={1}
                           value={bottomMaskPct}
                           onChange={(e) => setBottomMaskPct(parseInt(e.target.value))}
@@ -327,6 +348,7 @@ export default function BurnProgressModal({
               <span>Video đã được render và đóng gói hoàn chỉnh thành công!</span>
             </div>
 
+            <button onClick={() => setConfigureAgain(true)} className="rounded-lg border p-2 text-sm">Render lại với cấu hình khác</button>
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={project.burned_video_url}

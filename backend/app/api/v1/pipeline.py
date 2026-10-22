@@ -8,6 +8,7 @@ from app.models.project import Project
 from typing import Optional
 from app.schemas.translation import PipelineTriggerRequest, PipelineStatusResponse, BurnOptionsRequest
 from app.services.workflow_engine import workflow_engine
+from app.services.job_service import job_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects/{project_id}/pipeline", tags=["Pipeline & Processing"])
@@ -26,12 +27,8 @@ async def trigger_pipeline(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    async def run_bg(pid: str, stg: str):
-        async with get_async_session() as bg_db:
-            await workflow_engine.run_pipeline(bg_db, pid, start_stage=stg)
-
-    background_tasks.add_task(run_bg, project_id, req.stage)
-    return {"success": True, "message": f"Pipeline triggered at stage: {req.stage or 'FULL'}"}
+    job = await job_service.enqueue(db, project_id, 'PIPELINE', {'start_stage': req.stage, 'force_reprocess': req.force_reprocess})
+    return {"success": True, "job_id": job.id, "message": "Pipeline queued"}
 
 
 @router.post("/burn")
@@ -47,18 +44,14 @@ async def start_burning(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    updates = {}
     if req:
-        existing_cfg = project.settings_override or {}
+        existing_cfg = dict(project.settings_override or {})
         existing_cfg.update(req.model_dump(exclude_unset=True))
-        project.settings_override = existing_cfg
-        await db.commit()
+        updates['settings_override'] = existing_cfg
 
-    async def run_burn_bg(pid: str):
-        async with get_async_session() as bg_db:
-            await workflow_engine.burn_project_video(bg_db, pid)
-
-    background_tasks.add_task(run_burn_bg, project_id)
-    return {"success": True, "message": "Video burning initiated"}
+    job = await job_service.enqueue(db, project_id, 'BURN', {}, project_updates=updates)
+    return {"success": True, "job_id": job.id, "message": "Video burning queued"}
 
 
 @router.get("/status", response_model=PipelineStatusResponse)

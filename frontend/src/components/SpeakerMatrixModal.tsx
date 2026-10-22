@@ -1,4 +1,5 @@
 'use client';
+import toast from 'react-hot-toast';
 
 import { useState, useRef, useEffect } from 'react';
 import {
@@ -41,14 +42,29 @@ export default function SpeakerMatrixModal({
   const [previewLoadingVoice, setPreviewLoadingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Synchronize state when modal opens or props change
+  const dirtyRef = useRef(false);
+  const baseDataRef = useRef('');
+  const [remoteConflict, setRemoteConflict] = useState(false);
+  const incomingData = JSON.stringify([speakers, relationships]);
+  const reloadDraft = () => {
+    dirtyRef.current = false;
+    baseDataRef.current = incomingData;
+    setRemoteConflict(false);
+    setEditingSpeakers(speakers);
+    setEditingRels(relationships);
+  };
+  useEffect(() => {
+    if (!isOpen) { dirtyRef.current = false; setRemoteConflict(false); return; }
+    if (!dirtyRef.current) reloadDraft();
+    else if (incomingData !== baseDataRef.current) setRemoteConflict(true);
+  }, [isOpen, projectId, incomingData]);
+
+  // Load voices once when opening; content snapshots must not discard drafts.
   useEffect(() => {
     if (isOpen) {
-      setEditingSpeakers(speakers);
-      setEditingRels(relationships);
       api.getTTSVoices()
         .then((data) => setVoices(data))
-        .catch((err) => console.error('Failed to load TTS voices:', err));
+        .catch((err) => toast.error(err instanceof Error ? err.message : 'Không tải được giọng đọc'));
     } else {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -56,7 +72,7 @@ export default function SpeakerMatrixModal({
       }
       setPreviewingVoice(null);
     }
-  }, [isOpen, speakers, relationships]);
+  }, [isOpen, projectId]);
 
   const handlePlayVoicePreview = async (voiceId: string) => {
     try {
@@ -105,12 +121,14 @@ export default function SpeakerMatrixModal({
   if (!isOpen) return null;
 
   const handleSpeakerChange = (tag: string, field: keyof SpeakerProfile, value: any) => {
+    dirtyRef.current = true;
     setEditingSpeakers((prev) =>
       prev.map((s) => (s.speaker_tag === tag ? { ...s, [field]: value } : s))
     );
   };
 
   const handleRelChange = (source: string, target: string, field: keyof RelationshipMatrix, value: any) => {
+    dirtyRef.current = true;
     setEditingRels((prev) =>
       prev.map((r) =>
         r.source_speaker === source && r.target_speaker === target ? { ...r, [field]: value } : r
@@ -139,7 +157,7 @@ export default function SpeakerMatrixModal({
       setShowAddSpeaker(false);
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -153,7 +171,7 @@ export default function SpeakerMatrixModal({
       );
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -181,7 +199,7 @@ export default function SpeakerMatrixModal({
       setNewRelType('');
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -195,7 +213,7 @@ export default function SpeakerMatrixModal({
       );
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -234,7 +252,7 @@ export default function SpeakerMatrixModal({
       });
       onUpdated();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     }
   };
 
@@ -247,7 +265,7 @@ export default function SpeakerMatrixModal({
       onUpdated();
       setActiveTab('speakers');
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     } finally {
       setIsApplyingPreset(false);
     }
@@ -271,7 +289,7 @@ export default function SpeakerMatrixModal({
         onUpdated();
       }
     } catch (err) {
-      console.error('Failed to import speakers:', err);
+      toast.error(err instanceof Error ? err.message : 'Không nhập được hồ sơ nhân vật');
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -310,7 +328,7 @@ export default function SpeakerMatrixModal({
       onUpdated();
       onClose();
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Không lưu được thay đổi');
     } finally {
       setIsSaving(false);
     }
@@ -372,7 +390,8 @@ export default function SpeakerMatrixModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <div role="dialog" aria-modal="true" aria-label="Nhân vật và xưng hô" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      {remoteConflict && <div role="alert" className="fixed top-4 left-4 right-4 z-[60] rounded-xl bg-amber-100 p-3 text-amber-900">Dữ liệu trên máy chủ đã thay đổi. Bản nháp được giữ lại; tải lại trước khi lưu để tránh ghi đè. <button onClick={reloadDraft} className="font-bold underline">Tải lại dữ liệu</button></div>}
       {/* Hidden audio element for TTS preview playback */}
       <audio
         ref={audioRef}
@@ -382,7 +401,7 @@ export default function SpeakerMatrixModal({
       />
       <div className="bg-white w-full max-w-4xl rounded-3xl p-6 relative border border-slate-200 shadow-2xl max-h-[92vh] flex flex-col">
         {/* Close Button */}
-        <button
+        <button aria-label="Đóng"
           onClick={onClose}
           className="absolute right-5 top-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >
@@ -412,8 +431,8 @@ export default function SpeakerMatrixModal({
         </div>
 
         {/* Tabs & Quick Actions */}
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
-          <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 mb-4 pb-2 border-b border-slate-100">
+          <div className="flex flex-wrap items-center gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
             <button
               onClick={() => setActiveTab('speakers')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
@@ -481,7 +500,7 @@ export default function SpeakerMatrixModal({
                 className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-3 mb-2 animate-in fade-in"
               >
                 <div className="text-xs font-bold text-indigo-900">Tạo mới nhân vật</div>
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <input
                     type="text"
                     placeholder="Mã Tag (VD: SPEAKER_02)"
@@ -541,8 +560,8 @@ export default function SpeakerMatrixModal({
                 className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-indigo-200 transition-all space-y-3 shadow-2xs"
               >
                 {/* Row 1: Tag, Names, Avatar Color, Cue Count, Delete */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap min-w-0 items-center gap-3 flex-1">
                     <span
                       className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
                       style={{ backgroundColor: spk.avatar_color || '#6366f1' }}
@@ -593,7 +612,7 @@ export default function SpeakerMatrixModal({
                 </div>
 
                 {/* Row 2: Gender, Age, Role, Tone */}
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <div>
                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
                       Giới tính (Gender)
@@ -656,8 +675,8 @@ export default function SpeakerMatrixModal({
                 </div>
 
                 {/* Row 3: Voice Selection & Notes */}
-                <div className="grid grid-cols-12 gap-2.5 pt-1">
-                  <div className="col-span-5">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
+                  <div className="col-span-1 sm:col-span-5">
                     <label className="block text-[10px] uppercase font-bold text-indigo-700 mb-1">
                       Giọng Lồng Tiếng AI (TTS Voice)
                     </label>
@@ -724,6 +743,11 @@ export default function SpeakerMatrixModal({
                           </>
                         )}
                       </select>
+                      <label className="mt-2 flex items-center gap-2 text-xs">Tốc độ giọng
+                        <input aria-label={`Tốc độ ${spk.speaker_tag}`} type="number" min="0.5" max="2" step="0.1"
+                          value={spk.tts_speed ?? 1} className="w-20 rounded border p-1"
+                          onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) handleSpeakerChange(spk.speaker_tag, 'tts_speed', e.target.valueAsNumber); }} />
+                      </label>
 
                       {/* Nút Nghe Thử Giọng Ngay Lập Tức */}
                       <button
@@ -747,7 +771,7 @@ export default function SpeakerMatrixModal({
                     </div>
                   </div>
 
-                  <div className="col-span-7">
+                  <div className="col-span-1 sm:col-span-7">
                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
                       Ghi chú xuất thân & Cấm kỵ khi dịch đại từ
                     </label>
@@ -770,7 +794,7 @@ export default function SpeakerMatrixModal({
           <div className="flex-1 overflow-y-auto pr-1 space-y-4">
             {/* Guide Banner */}
             <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-purple-50/70 to-cyan-50 border border-indigo-200 space-y-2 shadow-2xs">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-base">🎯</span>
                   <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
@@ -780,7 +804,7 @@ export default function SpeakerMatrixModal({
                 <button
                   type="button"
                   onClick={handleApplyMatrixToSubtitles}
-                  disabled={isApplyingMatrix}
+                  disabled={remoteConflict || isApplyingMatrix}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50"
                   title="Dịch lại phụ đề theo ma trận xưng hô ngay"
                 >
@@ -815,7 +839,7 @@ export default function SpeakerMatrixModal({
                 className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-200 space-y-3 animate-in fade-in"
               >
                 <div className="text-xs font-bold text-indigo-900">Thêm mới cặp xưng hô đối thoại</div>
-                <div className="grid grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <div>
                     <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Người nói (Source)</label>
                     <select
@@ -1209,12 +1233,12 @@ export default function SpeakerMatrixModal({
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-100 mt-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleApplyMatrixToSubtitles}
-              disabled={isApplyingMatrix || isSaving}
+              disabled={remoteConflict || isApplyingMatrix || isSaving}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
               title="Lưu hồ sơ và dịch lại toàn bộ phụ đề theo ma trận xưng hô ngay"
             >
@@ -1249,7 +1273,7 @@ export default function SpeakerMatrixModal({
             <button
               type="button"
               onClick={handleSaveAll}
-              disabled={isSaving}
+              disabled={remoteConflict || isSaving}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20"
             >
               <Save className="w-4 h-4" />
