@@ -2,12 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Flame, CheckCircle2, Loader2, Video, FileText } from 'lucide-react';
-import { Project, BurnOptions, VideoCleanupOptions, CleanChineseMode, SubtitlePreset, SubtitleCue } from '@/lib/types';
-import { resolveBurnPresentation } from '@/lib/burnPresentation';
-import BurnStylePreview from './BurnStylePreview';
-import { defaultCleanupOptions, validCleanupRegions } from '@/lib/videoCleanup';
-import VideoCleanupEditor from './VideoCleanupEditor';
-import CleanupQualitySummary from './CleanupQualitySummary';
+import { Project } from '@/lib/types';
 import { isProjectBusy } from '@/lib/projectView';
 import { api } from '@/lib/api';
 import { getFriendlyStageName } from '@/components/PipelineProgressTracker';
@@ -16,9 +11,15 @@ interface BurnProgressModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: Project;
-  onBurnStarted: (options?: BurnOptions) => Promise<void>;
+  onBurnStarted: (options?: {
+    subtitle_preset?: string;
+    bilingual?: boolean;
+    mask_original_sub?: boolean;
+    clean_chinese_mode?: string;
+    top_mask_pct?: number;
+    bottom_mask_pct?: number;
+  }) => Promise<void>;
   cuesCount?: number;
-  cues?: SubtitleCue[];
 }
 
 export default function BurnProgressModal({
@@ -27,17 +28,16 @@ export default function BurnProgressModal({
   project,
   onBurnStarted,
   cuesCount,
-  cues,
 }: BurnProgressModalProps) {
   const existingCfg = project.settings_override || {};
-  const initial = resolveBurnPresentation(existingCfg);
-  const [subtitlePreset, setSubtitlePreset] = useState<SubtitlePreset>(initial.subtitle_preset);
+  const [subtitlePreset, setSubtitlePreset] = useState<string>(existingCfg.subtitle_preset || 'cinema');
   const [bilingual, setBilingual] = useState<boolean>(existingCfg.bilingual || false);
-  const [cleanChineseMode, setCleanChineseMode] = useState<CleanChineseMode>(initial.clean_chinese_mode);
-  const [topMaskPct, setTopMaskPct] = useState<number>(initial.top_mask_pct);
-  const [bottomMaskPct, setBottomMaskPct] = useState<number>(initial.bottom_mask_pct);
+  const [cleanChineseMode, setCleanChineseMode] = useState<string>(
+    existingCfg.clean_chinese_mode || (existingCfg.mask_original_sub !== false ? 'cinema_bars' : 'none')
+  );
+  const [topMaskPct, setTopMaskPct] = useState<number>(existingCfg.top_mask_pct ?? 11);
+  const [bottomMaskPct, setBottomMaskPct] = useState<number>(existingCfg.bottom_mask_pct ?? 15);
   const [showAdvancedMask, setShowAdvancedMask] = useState<boolean>(false);
-  const [cleanupOptions, setCleanupOptions] = useState<VideoCleanupOptions>(() => ({...defaultCleanupOptions(), ...existingCfg.cleanup_options}));
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -45,11 +45,9 @@ export default function BurnProgressModal({
   useEffect(() => {
     if (isOpen) {
       const cfg = project.settings_override || {};
-      const presentation = resolveBurnPresentation(cfg);
-      setSubtitlePreset(presentation.subtitle_preset); setBilingual(presentation.bilingual);
-      setCleanChineseMode(presentation.clean_chinese_mode);
-      setTopMaskPct(presentation.top_mask_pct); setBottomMaskPct(presentation.bottom_mask_pct);
-      setCleanupOptions({...defaultCleanupOptions(), ...cfg.cleanup_options});
+      setSubtitlePreset(cfg.subtitle_preset || 'cinema'); setBilingual(cfg.bilingual ?? false);
+      setCleanChineseMode(cfg.clean_chinese_mode || (cfg.mask_original_sub === false ? 'none' : 'cinema_bars'));
+      setTopMaskPct(cfg.top_mask_pct ?? 11); setBottomMaskPct(cfg.bottom_mask_pct ?? 15);
       setError(''); setConfigureAgain(false);
     }
   }, [isOpen, project.id]);
@@ -60,10 +58,6 @@ export default function BurnProgressModal({
   const isCompleted = project.status === 'COMPLETED' && !!project.burned_video_url && !configureAgain;
 
   const handleStart = async () => {
-    if (cleanChineseMode === 'inpaint' && (!validCleanupRegions(cleanupOptions.regions) ||
-      (!cleanupOptions.auto_detect_chinese && cleanupOptions.regions.length === 0))) {
-      setError('Bật tự dò chữ Trung hoặc chọn vùng hợp lệ cần xóa.'); return;
-    }
     setSubmitting(true); setError('');
     try { await onBurnStarted({
       subtitle_preset: subtitlePreset,
@@ -72,14 +66,13 @@ export default function BurnProgressModal({
       clean_chinese_mode: cleanChineseMode,
       top_mask_pct: topMaskPct,
       bottom_mask_pct: bottomMaskPct,
-      ...(cleanChineseMode === 'inpaint' ? {cleanup_options: cleanupOptions} : {}),
     }); } catch (error) { setError(error instanceof Error ? error.message : 'Không tạo được job render'); }
     finally { setSubmitting(false); }
   };
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Burn Video" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      <div className={`bg-white w-full ${['inpaint', 'white_bars'].includes(cleanChineseMode) ? 'max-w-3xl' : 'max-w-lg'} rounded-3xl p-6 relative border border-slate-200 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto`}>
+      <div className="bg-white w-full max-w-lg rounded-3xl p-6 relative border border-slate-200 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         <button aria-label="Đóng"
           onClick={onClose}
@@ -95,7 +88,7 @@ export default function BurnProgressModal({
           </div>
           <div>
             <h3 className="font-heading font-bold text-xl text-slate-900">Video Subtitle Burner</h3>
-            <p className="text-xs text-slate-500">Xử lý chữ/logo gốc trước khi burn phụ đề Việt.</p>
+            <p className="text-xs text-slate-500">Render phụ đề cứng &amp; Tự động xóa chữ tiếng Trung (GPU NVENC/QSV/AMF).</p>
           </div>
         </div>
 
@@ -127,16 +120,6 @@ export default function BurnProgressModal({
         {/* Burn Style & Presentation Customizer (Only shown before burning starts) */}
         {!isBurning && !isCompleted && (
           <div className="space-y-4 pt-1">
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-              <p className="text-xs text-indigo-950">Kiểu theo ảnh: chữ trắng đậm nghiêng, in hoa và viền đen; dải che trên/dưới màu trắng.</p>
-              <button type="button" onClick={() => {
-                setSubtitlePreset('comic'); setCleanChineseMode('white_bars'); setBilingual(false);
-                setTopMaskPct(11); setBottomMaskPct(15); setShowAdvancedMask(true);
-              }} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Áp dụng kiểu mẫu</button>
-            </div>
-            <BurnStylePreview source={project.dubbed_video_url || (project.local_video_path ? project.original_video_url : undefined)}
-              cues={cues} options={{subtitle_preset: subtitlePreset, clean_chinese_mode: cleanChineseMode,
-                mask_original_sub: cleanChineseMode !== 'none', top_mask_pct: topMaskPct, bottom_mask_pct: bottomMaskPct, bilingual}} />
             {/* Clean Chinese Section */}
             <div className="space-y-2.5 bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80">
               <div className="flex items-center justify-between">
@@ -144,7 +127,7 @@ export default function BurnProgressModal({
                   <span className="text-base">🛡️</span>
                   <div>
                     <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                      Xử lý phụ đề và logo gốc
+                      Che phụ đề và logo gốc
                     </h4>
                     <p className="text-[11px] text-amber-800/80">
                       Chọn vùng che phù hợp; kiểm tra nội dung trước khi xuất video.
@@ -155,16 +138,6 @@ export default function BurnProgressModal({
 
               {/* Modes Selection Grid */}
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <button type="button" aria-pressed={cleanChineseMode === 'white_bars'} onClick={() => setCleanChineseMode('white_bars')}
-                  className={`col-span-2 p-3 rounded-xl border text-left text-xs ${cleanChineseMode === 'white_bars' ? 'border-amber-600 bg-white ring-2 ring-amber-500/20' : 'border-amber-200 bg-white/70'}`}>
-                  <strong>Dải trắng trên và dưới</strong>
-                  <p className="mt-1 text-slate-600">Che kín vùng logo/sub gốc bằng nền trắng; chỉnh độ cao từng dải bên dưới.</p>
-                </button>
-                <button type="button" onClick={() => setCleanChineseMode('inpaint')}
-                  className={`col-span-2 p-3 rounded-xl border text-left text-xs ${cleanChineseMode === 'inpaint' ? 'border-amber-600 bg-white ring-2 ring-amber-500/20' : 'border-amber-200 bg-white/70'}`}>
-                  <strong>Xóa chữ/logo — phục hồi nền</strong>
-                  <p className="mt-1 text-slate-600">Tự dò chữ Trung và xóa vùng logo đã chọn; giữ nguyên kích thước video.</p>
-                </button>
                 <button type="button" onClick={() => setCleanChineseMode('none')}
                   className={`p-2.5 rounded-xl border text-left text-xs ${cleanChineseMode === 'none' ? 'border-amber-600 bg-white ring-2 ring-amber-500/20' : 'border-amber-200 bg-white/70'}`}>
                   Không Che (Giữ khung hình gốc)
@@ -183,7 +156,7 @@ export default function BurnProgressModal({
                     <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-full">Khuyên dùng</span>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-snug">
-                    Che dải đen trên và dưới; nội dung gốc trong dải bị che khuất.
+                    Che dải đen Trên (xóa logo) và Dưới (xóa sub Trung). Chuẩn phim rạp 21:9.
                   </p>
                 </button>
 
@@ -234,10 +207,7 @@ export default function BurnProgressModal({
               </div>
 
               {/* Advanced Mask Sliders Toggle */}
-              {cleanChineseMode === 'inpaint' && <VideoCleanupEditor
-                source={project.dubbed_video_url || (project.local_video_path ? project.original_video_url : undefined)}
-                value={cleanupOptions} onChange={setCleanupOptions} />}
-              {cleanChineseMode !== 'none' && cleanChineseMode !== 'inpaint' && (
+              {cleanChineseMode !== 'none' && (
                 <div className="pt-1">
                   <button
                     type="button"
@@ -255,7 +225,6 @@ export default function BurnProgressModal({
                           <span className="text-amber-700 font-bold">{bottomMaskPct}% chiều cao</span>
                         </div>
                         <input
-                          aria-label="Chiều cao dải dưới (%)"
                           type="range"
                           min={0}
                           max={35}
@@ -271,17 +240,16 @@ export default function BurnProgressModal({
                         </div>
                       </div>
 
-                      {(['white_bars', 'cinema_bars', 'smart_blur', 'cinema_zoom'].includes(cleanChineseMode)) && (
+                      {(cleanChineseMode === 'cinema_bars' || cleanChineseMode === 'smart_blur' || cleanChineseMode === 'cinema_zoom') && (
                         <div className="space-y-1 pt-1 border-t border-amber-100">
                           <div className="flex justify-between text-[11px] font-semibold text-slate-700">
                             <span>Độ cao dải che logo/watermark ở trên:</span>
                             <span className="text-amber-700 font-bold">{topMaskPct}% chiều cao</span>
                           </div>
                           <input
-                            aria-label="Chiều cao dải trên (%)"
                             type="range"
-                            min={0}
-                            max={28}
+                            min={6}
+                            max={18}
                             step={1}
                             value={topMaskPct}
                             onChange={(e) => setTopMaskPct(parseInt(e.target.value))}
@@ -304,11 +272,6 @@ export default function BurnProgressModal({
 
             {/* Presets */}
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" aria-pressed={subtitlePreset === 'comic'} onClick={() => setSubtitlePreset('comic')}
-                className={`col-span-3 rounded-xl border p-3 text-left ${subtitlePreset === 'comic' ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:bg-slate-50'}`}>
-                <strong className="text-sm text-slate-900">Chữ theo mẫu — đậm nghiêng, viền đen</strong>
-                <p className="mt-1 text-[11px] text-slate-600">Chữ trắng in hoa, dáng hẹp. Bản dịch đã lưu giữ nguyên nội dung.</p>
-              </button>
               <button
                 type="button"
                 onClick={() => setSubtitlePreset('cinema')}
@@ -386,8 +349,6 @@ export default function BurnProgressModal({
             </div>
 
             <button onClick={() => setConfigureAgain(true)} className="rounded-lg border p-2 text-sm">Render lại với cấu hình khác</button>
-            {project.settings_override?.clean_chinese_mode === 'inpaint' && project.settings_override?.mask_original_sub !== false &&
-              <CleanupQualitySummary projectId={project.id} outputUrl={project.burned_video_url} />}
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={project.burned_video_url}
@@ -399,8 +360,7 @@ export default function BurnProgressModal({
               </a>
 
               <a
-                href={api.getExportUrl(project.id, 'ass', {preset: resolveBurnPresentation(project.settings_override).subtitle_preset,
-                  bilingual: resolveBurnPresentation(project.settings_override).bilingual})}
+                href={api.getExportUrl(project.id, 'ass')}
                 download
                 className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 transition-colors"
               >

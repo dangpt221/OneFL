@@ -1,4 +1,4 @@
-import { Project, SubtitleCue, SpeakerProfile, RelationshipMatrix, GlossaryTerm, GenrePresetSummary, SystemInfo, TTSVoice, TTSPreviewResponse, DubRequest, DubbingTimingReport, BurnOptions, CleanupReport } from './types';
+import { Project, SubtitleCue, SpeakerProfile, RelationshipMatrix, GlossaryTerm, GenrePresetSummary, SystemInfo, TTSVoice, TTSPreviewResponse, DubRequest, DubbingTimingReport } from './types';
 
 const API_BASE = '/api/v1';
 
@@ -378,7 +378,14 @@ export const api = {
 
   async startBurning(
     projectId: string,
-    options?: BurnOptions
+    options?: {
+      subtitle_preset?: string;
+      bilingual?: boolean;
+      mask_original_sub?: boolean;
+      clean_chinese_mode?: string;
+      top_mask_pct?: number;
+      bottom_mask_pct?: number;
+    }
   ): Promise<{ success: boolean; message: string }> {
     const res = await checkedFetch(`${API_BASE}/projects/${projectId}/pipeline/burn`, {
       method: 'POST',
@@ -390,10 +397,6 @@ export const api = {
   },
 
   // Settings
-  async getCleanupReport(projectId: string, signal?: AbortSignal): Promise<CleanupReport> {
-    return (await checkedFetch(`${API_BASE}/projects/${projectId}/pipeline/cleanup-report`, {signal})).json();
-  },
-
   async getSystemSettings(): Promise<SystemInfo> {
     const res = await checkedFetch(`${API_BASE}/settings/info`);
     if (!res.ok) throw new Error('Failed to fetch system settings');

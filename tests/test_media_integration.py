@@ -31,61 +31,6 @@ async def test_actual_multichunk_burn_preserves_silent_tail(isolated_db, tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_cleanup_multichunk_report_and_resume(isolated_db, tmp_path, monkeypatch):
-    pytest.importorskip('cv2')
-    import json
-    from app.services.media_process import run_media, probe_media
-    from app.services.workflow_engine import workflow_engine
-    from app.services.video_burner import video_burner
-    source = tmp_path / 'cleanup-source.mp4'
-    await run_media([settings.get_ffmpeg_bin(), '-y', '-f', 'lavfi', '-i',
-                     'color=c=blue:size=320x240:rate=15,drawbox=x=32:y=24:w=32:h=24:color=white:t=fill',
-                     '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=24000', '-t', '2',
-                     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', str(source)])
-    project = Project(title='cleanup chunks', local_video_path=str(source), settings_override={
-        'clean_chinese_mode': 'inpaint', 'cleanup_options': {'auto_detect_chinese': False,
-        'regions': [{'x': .1, 'y': .1, 'width': .1, 'height': .1}]}})
-    isolated_db.add(project)
-    await isolated_db.flush()
-    isolated_db.add(SubtitleCue(project_id=project.id, cue_index=1, start_time=.1, end_time=.7,
-                              original_text='Hello', translated_text='Xin chào'))
-    await isolated_db.commit()
-    monkeypatch.setattr(settings, 'VIDEO_CHUNK_DURATION_SECONDS', 1)
-    monkeypatch.setattr(video_burner, '_cached_encoder', 'libx264')
-    await workflow_engine.burn_project_video(isolated_db, project.id)
-    output = Path(project.burned_video_path)
-    report = json.loads(output.with_suffix('.cleanup.json').read_text())
-    assert report['processed_frames'] == 30 and report['masked_frames'] == 30
-    assert report['chunks'] == 2 and report['method'] == 'opencv-telea'
-    assert abs(await probe_media(output, require_video=True, require_audio=True) - 2) < .2
-    # A valid checkpoint needs its matching report; the next run may reuse it.
-    async def unexpected_render(*args, **kwargs):
-        raise AssertionError('valid cleanup checkpoints should be reused')
-    monkeypatch.setattr(video_burner, 'burn_subtitles_to_video', unexpected_render)
-    await workflow_engine.burn_project_video(isolated_db, project.id)
-    assert project.status == 'COMPLETED'
-
-
-@pytest.mark.asyncio
-async def test_current_cleanup_report_survives_retention(isolated_db):
-    import os
-    import time
-    from app.services.artifact_service import cleanup_expired_scratch
-    root = settings.OUTPUT_DIR / 'cleanup-retention'
-    root.mkdir(parents=True)
-    output = root / 'current.mp4'
-    report, stale = output.with_suffix('.cleanup.json'), root / 'old.cleanup.json'
-    for path in (output, report, stale):
-        path.write_text('retention fixture')
-        old = time.time() - 365 * 86400
-        os.utime(path, (old, old))
-    isolated_db.add(Project(title='cleanup retention', burned_video_path=str(output)))
-    await isolated_db.commit()
-    assert await cleanup_expired_scratch(isolated_db) == 1
-    assert output.exists() and report.exists() and not stale.exists()
-
-
-@pytest.mark.asyncio
 async def test_actual_dubbing_timeline_and_mux(isolated_db, tmp_path, monkeypatch):
     from app.services.media_process import run_media, probe_media
     from app.services.tts_service import tts_service

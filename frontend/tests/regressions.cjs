@@ -30,11 +30,6 @@ function loadComponent(relativePath, exported = 'default') {
       if (name === '@/lib/csv') return { parseCsv() { return []; } };
       if (name === '@/lib/api') return { api: { getGlossaryExportUrl: () => '/export' } };
       if (name === '@/lib/projectView') return projectView;
-      if (name === '@/lib/videoCleanup') return cleanupHelpers;
-      if (name === '@/lib/burnPresentation') return presentationHelpers;
-      if (name === '@/lib/ttsPresentation') return ttsHelpers;
-      if (name === './BurnStylePreview') return {default: () => null};
-      if (name === './VideoCleanupEditor' || name === './CleanupQualitySummary') return {default: () => null};
       if (name === '@/components/PipelineProgressTracker') return { getFriendlyStageName: s => s };
       if (name === 'react-hot-toast') return { __esModule: true, default: {} };
       throw new Error(`Unexpected import ${name}`);
@@ -49,18 +44,6 @@ new Function('exports', ts.transpileModule(fs.readFileSync(path.join(root, 'fron
   compilerOptions: { module: ts.ModuleKind.CommonJS }
 }).outputText)(projectView);
 const results = [];
-const cleanupHelpers = {};
-new Function('exports', ts.transpileModule(fs.readFileSync(path.join(root, 'frontend/src/lib/videoCleanup.ts'), 'utf8'), {
-  compilerOptions: {module: ts.ModuleKind.CommonJS}
-}).outputText)(cleanupHelpers);
-const presentationHelpers = {};
-new Function('exports', ts.transpileModule(fs.readFileSync(path.join(root, 'frontend/src/lib/burnPresentation.ts'), 'utf8'), {
-  compilerOptions: {module: ts.ModuleKind.CommonJS}
-}).outputText)(presentationHelpers);
-const ttsHelpers = {};
-new Function('exports', ts.transpileModule(fs.readFileSync(path.join(root, 'frontend/src/lib/ttsPresentation.ts'), 'utf8'), {
-  compilerOptions: {module: ts.ModuleKind.CommonJS}
-}).outputText)(ttsHelpers);
 for (const [relativePath, props] of [
   ['frontend/src/components/CreateProjectModal.tsx', { onClose() {}, onSuccess() {} }],
   ['frontend/src/components/GlossaryModal.tsx', { terms: [], projectId: 'audit', onClose() {}, onUpdated() {} }],
@@ -145,23 +128,3 @@ assert.equal(asrWorkflow.steps.length,2);
 assert.equal(asrWorkflow.steps[1].status,'completed');
 assert.equal(workflow({status:'FAILED',current_stage:'FAILED',last_job_kind:'TRANSCRIBE',progress_percentage:10}).steps[0].status,'failed');
 console.log('Agent ASR workflow preserves extraction-only semantics: passed');
-const Tracker = loadComponent('frontend/src/components/PipelineProgressTracker.tsx');
-const trackerBase = {id:'resume',title:'Recovery',status:'DUBBING',current_stage:'DUBBING_VOICE_SYNTHESIS',progress_percentage:30,last_job_kind:'DUBBING',last_dub_config:{voice:'nova'}};
-const renderTracker = project => renderToString(React.createElement(Tracker,{project,onRetry() {},onRefresh() {}}));
-for (const project of [
-  {...trackerBase,active_job_id:'running'},
-  {...trackerBase,status:'QUEUED',active_job_id:'queued'},
-  {...trackerBase,status:'FAILED',active_job_id:'finishing'},
-  {...trackerBase,status:'PROCESSING',last_job_kind:'PIPELINE',current_stage:'TRANSLATING',active_job_id:'translation'},
-  {...trackerBase,status:'CREATED',last_dub_config:null,last_job_kind:null,current_stage:'CREATED'},
-]) {
-  const html = renderTracker(project);
-  assert.ok(!html.includes('Tiếp tục chạy') && !html.includes('Tiếp tục từ điểm dừng'), 'Never offer another resume while a job owns this project');
-}
-const failedDub = renderTracker({...trackerBase,status:'FAILED',active_job_id:null});
-assert.ok(failedDub.includes('Tiếp tục chạy'), 'Interrupted saved dubbing can resume');
-assert.ok(!failedDub.includes('Thử lại</span>'), 'Dubbing failure must not retry the translation pipeline');
-assert.ok(!renderTracker({...trackerBase,status:'FAILED',last_dub_config:null}).includes('Tiếp tục chạy'));
-assert.ok(renderTracker({...trackerBase,status:'CANCELLED'}).includes('Tiếp tục chạy'));
-assert.ok(renderTracker({...trackerBase,status:'FAILED',last_dub_config:null}).includes('Chưa có cấu hình lồng tiếng'));
-console.log('Tracker recovery respects durable job ownership and saved dubbing config: passed');

@@ -98,10 +98,10 @@ try{
   await p.getByRole('button',{name:'Chọn tất cả',exact:true}).click();await p.getByRole('button',{name:'Dịch Lại (2)',exact:true}).click();await until(async()=>(await cues()).items[0].translated_text==='Xin chao','retranslation');await idle();await p.getByText('Xin chao',{exact:true}).first().waitFor();
  });
  await scenario('dubbing configuration, actual media mux and reopen settings',async()=>{
-  await p.getByRole('button',{name:/Lồng Tiếng AI$/}).click();await dialog().getByText('Chọn Giọng Đọc AI',{exact:true}).waitFor();
+  await p.getByRole('button',{name:/Lồng Tiếng AI \(Nova\)/}).click();await dialog().getByText('Chọn Giọng Đọc AI',{exact:true}).waitFor();
   const speed=dialog().locator('input[type=range][min="0.8"]');await speed.fill('1.2');await dialog().locator('select').selectOption('tts-1-hd');await dialog().getByRole('checkbox').check();const previewResponse=p.waitForResponse(r=>r.url().endsWith('/tts/preview'));await dialog().getByRole('button',{name:/Nghe Thử/i}).first().click();assert.equal((await previewResponse).status(),200);
   await dialog().getByRole('button',{name:/Bắt Đầu Lồng Tiếng Ngay/}).click();await dialog().waitFor({state:'hidden'});await idle();const data=await project();assert.ok(data.dubbed_video_url&&data.dubbed_audio_url);assert.equal(data.last_dub_config.speed,1.2);assert.equal(data.last_dub_config.use_speaker_matrix,true);assert.equal(data.last_dub_config.model,'tts-1-hd');const calls=await(await p.request.post(FIXTURE+'/__e2e/control',{headers:{'x-e2e-key':KEY},data:{}})).json();assert.ok(calls.speech_calls.some(x=>x.speed===1.1&&x.model==='tts-1-hd')); 
-  assert.ok((await p.request.get(BASE+data.dubbed_video_url)).ok());await p.getByRole('button',{name:/Lồng Tiếng AI$/}).click();assert.equal(await dialog().locator('input[type=range][min="0.8"]').inputValue(),'1.2');await close();
+  assert.ok((await p.request.get(BASE+data.dubbed_video_url)).ok());await p.getByRole('button',{name:/Lồng Tiếng AI \(Nova\)/}).click();assert.equal(await dialog().locator('input[type=range][min="0.8"]').inputValue(),'1.2');await close();
   const quality=await api('/tts/projects/'+projectId+'/timing');assert.equal(quality.cue_count,2);assert.ok(quality.cues.every(c=>c.audio_end<=c.end_time));
   await p.getByRole('region',{name:'Kiểm tra đồng bộ',exact:true}).getByText(/Đã kiểm tra 2 câu/).waitFor();
   await p.getByRole('region',{name:'Kiểm tra đồng bộ',exact:true}).screenshot({path:OUT+'/dubbing-quality.png'});

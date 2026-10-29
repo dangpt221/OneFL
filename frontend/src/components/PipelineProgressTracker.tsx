@@ -2,7 +2,6 @@
 
 import { api } from '@/lib/api';
 import { Project } from '@/lib/types';
-import { getDubbingRecovery, isProjectBusy } from '@/lib/projectView';
 import {
   AlertCircle,
   Check,
@@ -26,7 +25,7 @@ import {
   Trash2,
   Users
 } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 
 export interface StepItem {
   id: string;
@@ -81,8 +80,8 @@ export function getFriendlyStageName(stage?: string): string {
   }
 }
 
-export function getFriendlyVoiceName(voiceId?: string | null): string {
-  if (!voiceId) return 'Ngọc Huyền';
+export function getFriendlyVoiceName(voiceId?: string): string {
+  if (!voiceId) return 'Hoài My';
   const voiceMap: Record<string, string> = {
     'vieneu-truc-ly': 'Trúc Ly',
     'vieneu-mai-anh': 'Mai Anh',
@@ -381,42 +380,25 @@ export default function PipelineProgressTracker({
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
   const [showTerminal, setShowTerminal] = useState<boolean>(true);
-  const [actionError, setActionError] = useState('');
-  const actionPending = useRef(false);
-  const recovery = getDubbingRecovery(project);
-  const canResumeDubbing = recovery === 'resumable';
 
   const handleResume = async () => {
-    if (actionPending.current || !canResumeDubbing) return;
-    actionPending.current = true;
     try {
       setIsActionLoading(true);
-      setActionError('');
-      // A job may have started in another tab since this snapshot rendered.
-      const latest = await api.getProject(project.id);
-      if (getDubbingRecovery(latest) !== 'resumable') {
-        await onRefresh?.();
-        return;
-      }
       if (onResume) {
         await onResume();
       } else {
         await api.resumeProjectDubbing(project.id);
+        if (onRefresh) onRefresh();
       }
-      await onRefresh?.();
-    } catch (err: unknown) {
-      setActionError('Không thể tiếp tục lồng tiếng: ' + (err instanceof Error ? err.message : String(err)));
-      await onRefresh?.();
+    } catch (err: any) {
+      alert("Không thể tiếp tục quy trình: " + (err.message || err));
     } finally {
-      actionPending.current = false;
       setIsActionLoading(false);
     }
   };
 
   const handleReset = async () => {
-    if (actionPending.current) return;
     if (!confirm("Bạn có chắc chắn muốn đặt lại trạng thái về Studio để tiếp tục thao tác? Toàn bộ các câu đã lồng tiếng hoặc dịch sẽ KHÔNG bị mất.")) return;
-    actionPending.current = true;
     try {
       setIsActionLoading(true);
       if (onReset) {
@@ -428,7 +410,6 @@ export default function PipelineProgressTracker({
     } catch (err: any) {
       alert("Không thể đặt lại: " + (err.message || err));
     } finally {
-      actionPending.current = false;
       setIsActionLoading(false);
     }
   };
@@ -437,8 +418,7 @@ export default function PipelineProgressTracker({
   const isFailed = project.status === 'FAILED';
   const isCompleted = project.status === 'COMPLETED';
   const isWaitingReview = project.status === 'WAITING_REVIEW';
-  const isCancelled = project.status === 'CANCELLED';
-  const isProcessing = isProjectBusy(project);
+  const isProcessing = !isCompleted && !isFailed && !isWaitingReview;
 
   const currentStep = workflow.steps[workflow.currentStepIndex] || workflow.steps[0];
   const completedCount = workflow.steps.filter(s => s.status === 'completed').length;
@@ -572,7 +552,8 @@ export default function PipelineProgressTracker({
                       : `Đang thực hiện: ${currentStep.name}`}
               </span>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {canResumeDubbing && (
+                {isProcessing && (
+                  <>
                     <button
                       onClick={handleResume}
                       disabled={isActionLoading}
@@ -582,8 +563,6 @@ export default function PipelineProgressTracker({
                       <Play className="w-3 h-3 fill-white" />
                       <span>{isActionLoading ? 'Đang gửi...' : 'Tiếp tục chạy'}</span>
                     </button>
-                )}
-                {isProcessing && (
                     <button
                       onClick={handleReset}
                       disabled={isActionLoading}
@@ -593,10 +572,11 @@ export default function PipelineProgressTracker({
                       <Square className="w-3 h-3" />
                       <span>Dừng / Đặt lại</span>
                     </button>
+                  </>
                 )}
-                {(isFailed || isCancelled) && !isProcessing && (
+                {isFailed && (
                   <>
-                    {onRetry && workflow.type === 'TRANSLATION' && (
+                    {onRetry && (
                       <button
                         onClick={onRetry}
                         className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition-colors cursor-pointer"
@@ -607,7 +587,6 @@ export default function PipelineProgressTracker({
                     )}
                     <button
                       onClick={handleReset}
-                      disabled={isActionLoading}
                       className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer"
                     >
                       <Square className="w-3 h-3" />
@@ -632,10 +611,6 @@ export default function PipelineProgressTracker({
             <p className="text-xs mt-1 leading-relaxed opacity-90 font-medium">
               {liveMessage}
             </p>
-            {actionError && <p role="alert" className="mt-2 text-xs text-rose-700">{actionError}</p>}
-            {recovery === 'configure' && <p className="mt-2 text-xs text-amber-800">
-              Chưa có cấu hình lồng tiếng đã lưu. Mở Lồng Tiếng AI để chọn giọng và bắt đầu.
-            </p>}
           </div>
         </div>
       </div>
@@ -834,7 +809,7 @@ export default function PipelineProgressTracker({
             ))}
           </div>
 
-          {canResumeDubbing && (
+          {isProcessing && (
             <div className="mt-3 pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
               <span className="flex items-center gap-1.5 text-amber-300/90 text-[11px]">
                 <span>💡</span>
@@ -849,9 +824,6 @@ export default function PipelineProgressTracker({
               </button>
             </div>
           )}
-          {isProcessing && <p className="mt-3 border-t border-slate-800/80 pt-2 text-[11px] text-slate-400">
-            Tác vụ đang chạy hoặc chờ worker. Sau khi khởi động lại server, worker tự khôi phục job đã lưu.
-          </p>}
         </div>
       )}
     </div>

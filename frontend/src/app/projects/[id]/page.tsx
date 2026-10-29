@@ -1,0 +1,657 @@
+'use client';
+import { resolvePlayback, isProjectBusy } from '@/lib/projectView';
+
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { createRefreshCoordinator } from '@/lib/refreshCoordinator';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import toast from 'react-hot-toast';
+import {
+  ArrowLeft,
+  Users,
+  BookOpen,
+  Flame,
+  Download,
+  Loader2,
+  Sparkles,
+  ChevronDown,
+  CheckCircle2,
+} from 'lucide-react';
+
+import { Project, SubtitleCue, SpeakerProfile, RelationshipMatrix, GlossaryTerm } from '@/lib/types';
+import { api } from '@/lib/api';
+import { useProjectWebSocket } from '@/lib/useWebSocket';
+import VideoPlayer, { CleanChineseMode } from '@/components/VideoPlayer';
+import SubtitleEditor from '@/components/SubtitleEditor';
+import SpeakerMatrixModal from '@/components/SpeakerMatrixModal';
+import GlossaryModal from '@/components/GlossaryModal';
+import BurnProgressModal from '@/components/BurnProgressModal';
+import DubbingModal from '@/components/DubbingModal';
+import DubbingQualitySummary from '@/components/DubbingQualitySummary';
+import PipelineProgressTracker, { getFriendlyStageName, getFriendlyVoiceName } from '@/components/PipelineProgressTracker';
+
+export default function ProjectStudioPage() {
+  const params = useParams();
+  const projectId = params.id as string;
+
+  const [loadError, setLoadError] = useState('');
+  const [project, setProject] = useState<Project | null>(null);
+  const [cues, setCues] = useState<SubtitleCue[]>([]);
+  const [speakers, setSpeakers] = useState<SpeakerProfile[]>([]);
+  const [relationships, setRelationships] = useState<RelationshipMatrix[]>([]);
+  const [glossaryTerms, setGlossaryTerms] = useState<GlossaryTerm[]>([]);
+
+  const [currentTime, setCurrentTime] = useState(0);
+  const [seekTarget, setSeekTarget] = useState<number | null>(null);
+  const [activeVideoSource, setActiveVideoSource] = useState<'auto' | 'burned' | 'dubbed' | 'original'>('auto');
+  const [cleanChineseMode, setCleanChineseMode] = useState<CleanChineseMode>('cinema_bars');
+
+
+  // Modals
+  const [isSpeakerModalOpen, setIsSpeakerModalOpen] = useState(false);
+  const [isGlossaryDrawerOpen, setIsGlossaryDrawerOpen] = useState(false);
+  const [isBurnModalOpen, setIsBurnModalOpen] = useState(false);
+  const [isDubModalOpen, setIsDubModalOpen] = useState(false);
+
+  // Live Console Logs
+  const [liveLogs, setLiveLogs] = useState<Array<{ time: string; text: string; level?: 'info' | 'warn' | 'success' | 'error' }>>([]);
+
+  // WebSocket Live Updates
+  const { isConnected, lastMessage } = useProjectWebSocket(projectId);
+
+  const loadRequest = useRef(0);
+  const fetchAllData = useCallback(async () => {
+    const request = loadRequest.current;
+    try {
+      const [projData, subData, spkData, gloData] = await Promise.all([
+        api.getProject(projectId),
+        api.getSubtitles(projectId),
+        api.getSpeakerMatrix(projectId),
+        api.getGlossary(projectId),
+      ]);
+      if (request !== loadRequest.current) return;
+      setLoadError('');
+      setProject(projData);
+      setCues(subData.items);
+      setSpeakers(spkData.speakers);
+      setRelationships(spkData.relationships);
+      setGlossaryTerms(gloData.items);
+    } catch (e) {
+      if (request !== loadRequest.current) return;
+      setLoadError(e instanceof Error ? e.message : 'Không tải được dự án');
+    }
+  }, [projectId]);
+
+  const refresh = useMemo(() => createRefreshCoordinator(fetchAllData), [fetchAllData]);
+  const loadAllData = useCallback(() => {
+    ++loadRequest.current; // Invalidate an older response immediately, before the trailing fetch.
+    return refresh.request();
+  }, [refresh]);
+  useEffect(() => () => {
+    ++loadRequest.current;
+    refresh.cancel();
+  }, [refresh]);
+
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
+
+  useEffect(() => { if (isConnected) void loadAllData(); }, [isConnected, loadAllData]);
+
+  useEffect(() => {
+    if (isConnected) return;
+    const interval = setInterval(() => void loadAllData(), 5000);
+    return () => clearInterval(interval);
+  }, [isConnected, loadAllData]);
+
+  // Handle live WebSocket events
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    const msgType = (lastMessage.type || '').toUpperCase();
+    if (msgType === 'PIPELINE_ERROR' || msgType === 'PIPELINE_FAILED') {
+      setProject(prev => prev ? { ...prev, status: 'FAILED', error_message: lastMessage.data?.error || 'Xử lý thất bại' } : null);
+      toast.error(lastMessage.data?.error || 'Xử lý thất bại');
+      void loadAllData();
+    } else if (msgType === 'CUES_CHANGED') {
+      void loadAllData();
+    } else if (msgType === 'STAGE_CHANGED' || msgType === 'STATUS_UPDATE' || lastMessage.type === 'stage_changed') {
+      const status = lastMessage.data?.status;
+      const stage = lastMessage.data?.stage || lastMessage.data?.current_stage;
+      const progress = lastMessage.data?.progress ?? lastMessage.data?.progress_percentage;
+      const message = lastMessage.data?.message;
+      const dubbed_audio_url = lastMessage.data?.dubbed_audio_url;
+      const dubbed_video_url = lastMessage.data?.dubbed_video_url;
+      const burned_video_url = lastMessage.data?.burned_video_url;
+      setProject(prev => prev ? {
+        ...prev,
+        ...(status ? { status } : {}),
+        ...(stage ? { current_stage: stage } : {}),
+        ...(progress !== undefined ? { progress_percentage: progress } : {}),
+        ...(message ? { error_message: message } : {}),
+        ...('dubbed_audio_url' in (lastMessage.data || {}) ? { dubbed_audio_url } : {}),
+        ...('dubbed_video_url' in (lastMessage.data || {}) ? { dubbed_video_url } : {}),
+        ...('burned_video_url' in (lastMessage.data || {}) ? { burned_video_url } : {})
+      } : null);
+      loadAllData();
+    } else if (msgType === 'PROGRESS_UPDATE' || lastMessage.type === 'progress_update') {
+      const pct = lastMessage.data?.progress ?? lastMessage.data?.percentage;
+      const msg = lastMessage.data?.message;
+      const stage = lastMessage.data?.stage;
+      setProject(prev => prev ? { 
+        ...prev, 
+        progress_percentage: pct !== undefined ? pct : prev.progress_percentage,
+        error_message: msg || prev.error_message,
+        current_stage: stage || prev.current_stage
+      } : null);
+    } else if (msgType === 'TRANSLATION_PROGRESS') {
+      setProject(prev => prev ? { 
+        ...prev, 
+        progress_percentage: lastMessage.data.progress ?? prev.progress_percentage,
+        error_message: lastMessage.data.message || prev.error_message 
+      } : null);
+      const batch = new Map<number, string>((lastMessage.data.latest_batch || []).map((c: { id: number; text: string }) => [c.id, c.text]));
+      setCues(previous => previous.map(c => batch.has(c.cue_index) ? { ...c, translated_text: batch.get(c.cue_index) } : c));
+    } else if (msgType === 'CUE_UPDATED') {
+      const updatedCue = lastMessage.data as SubtitleCue;
+      setCues(prev => prev.map(c => c.id === updatedCue.id ? updatedCue : c));
+    }
+
+    // Append to liveLogs terminal console
+    if (lastMessage.data?.message) {
+      const timeStr = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+      const extra = lastMessage.data?.current_cue ? ` ── "${lastMessage.data.current_cue}"` : '';
+      setLiveLogs(prev => [
+        ...prev.slice(-99),
+        {
+          time: timeStr,
+          text: `${lastMessage.data.message}${extra}`,
+          level: msgType.includes('FAIL') ? 'error' : msgType.includes('COMPLETED') ? 'success' : 'info'
+        }
+      ]);
+    }
+  }, [lastMessage, projectId, loadAllData]);
+
+  const handleSeek = (time: number) => {
+    setSeekTarget(time);
+    setCurrentTime(time);
+  };
+
+  const handleCueUpdated = (updatedCue: SubtitleCue) => {
+    setCues(prev => prev.map(c => c.id === updatedCue.id ? updatedCue : c));
+  };
+
+  const handleRetranslateRequested = async (cueIds: string[]) => {
+    try {
+      const updated = await api.retranslateCues(projectId, cueIds);
+      const updatedMap = new Map(updated.map(u => [u.id, u]));
+      setCues(prev => prev.map(c => updatedMap.get(c.id) || c));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Thao tác thất bại");
+    }
+  };
+
+  const handleBurnStarted = async (options?: {
+    subtitle_preset?: string;
+    bilingual?: boolean;
+    mask_original_sub?: boolean;
+    clean_chinese_mode?: string;
+    top_mask_pct?: number;
+    bottom_mask_pct?: number;
+  }) => {
+    try {
+      await api.startBurning(projectId, options);
+      await loadAllData();
+    } catch (e) {
+      throw e;
+    }
+  };
+
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+
+  const handleStartPipeline = async () => {
+    try {
+      setIsPipelineRunning(true);
+      await api.triggerPipeline(projectId, cues.length ? 'TRANSLATING' : 'INGESTING', cues.length > 0);
+      loadAllData();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Không khởi chạy được pipeline');
+    } finally {
+      setTimeout(() => setIsPipelineRunning(false), 2000);
+    }
+  };
+
+  if (!project) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <p className="text-sm font-semibold text-slate-600">{loadError || 'Đang tải OneFL Studio…'}</p>
+      </div>
+    );
+  }
+
+  const playback = resolvePlayback(project, activeVideoSource);
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-10">
+      {loadError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{loadError}</p>}
+      {/* Studio Top Action Bar */}
+      <div className="bg-white rounded-3xl p-4 lg:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Left: Navigation & Project Info */}
+        <div className="flex items-center gap-3.5 min-w-0">
+          <Link
+            href="/"
+            className="p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 transition-colors border border-slate-200/60 shrink-0"
+            title="Quay lại danh sách dự án"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-heading font-bold text-lg sm:text-xl text-slate-900 truncate max-w-[280px] sm:max-w-md">
+                {project.title}
+              </h1>
+              <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                {project.source_language.toUpperCase()} → {project.target_language.toUpperCase()}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 font-medium">
+              <span>Trạng thái: <strong className="text-indigo-600">{project.status}</strong></span>
+              <span>•</span>
+              <span>{cues.length} câu thoại</span>
+              {project.default_voice && (
+                <>
+                  <span>•</span>
+                  <span className="text-violet-600 font-semibold">Giọng: {getFriendlyVoiceName(project.default_voice)}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Studio Toolbars & Primary Actions */}
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          {/* Group 1: Configuration Tools */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/60">
+            <button
+              onClick={() => setIsSpeakerModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all"
+              title="Cấu hình xưng hô nhân vật"
+            >
+              <Users className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Nhân Vật ({speakers.length})</span>
+            </button>
+
+            <button
+              onClick={() => setIsGlossaryDrawerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all"
+              title="Từ điển thuật ngữ dịch"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-pink-600" />
+              <span>Thuật Ngữ ({glossaryTerms.length})</span>
+            </button>
+
+            {/* Export Dropdown */}
+            <div className="relative group">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all">
+                <Download className="w-3.5 h-3.5 text-cyan-600" />
+                <span>Xuất Sub</span>
+              </button>
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl border border-slate-200 p-1.5 hidden group-hover:block z-30 shadow-xl animate-in fade-in">
+                <a
+                  href={api.getExportUrl(projectId, 'ass', { preset: 'cinema' })}
+                  download
+                  className="block px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                >
+                  Phụ đề Cinema (.ass)
+                </a>
+                <a
+                  href={api.getExportUrl(projectId, 'ass', { bilingual: true })}
+                  download
+                  className="block px-3 py-2 rounded-lg text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition-colors"
+                >
+                  🌐 Phụ đề Song Ngữ (.ass)
+                </a>
+                <a
+                  href={api.getExportUrl(projectId, 'srt')}
+                  download
+                  className="block px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                >
+                  Phổ thông (.srt)
+                </a>
+                <a
+                  href={api.getExportUrl(projectId, 'vtt')}
+                  download
+                  className="block px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                >
+                  Trình duyệt web (.vtt)
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 2: Production Actions */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap w-full sm:w-auto items-center gap-2">
+            <button
+              onClick={handleStartPipeline}
+              disabled={isPipelineRunning || isProjectBusy(project)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              title="Khởi chạy nhận diện giọng nói và dịch phụ đề AI"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isPipelineRunning || project.status === 'PROCESSING' ? 'Đang Xử Lý Pipeline...' : (cues.length === 0 ? '🚀 Nhận diện & Dịch AI' : '🔄 Dịch Lại Toàn Bộ')}</span>
+            </button>
+
+            <button
+              onClick={() => setIsDubModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold shadow-sm shadow-indigo-600/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>🎙️ Lồng Tiếng AI (Nova)</span>
+            </button>
+
+            <button
+              onClick={() => setIsBurnModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-bold shadow-sm shadow-rose-500/20 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>Burn Video</span>
+            </button>
+
+            {/* Primary Download Completed Video Button */}
+            {(project.burned_video_url || project.dubbed_video_url) ? (
+              <div className="relative group">
+                <a
+                  href={project.burned_video_url || project.dubbed_video_url}
+                  download
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition-all cursor-pointer hover:scale-[1.03] active:scale-[0.98] ring-2 ring-emerald-400/40"
+                  title="Tải video hoàn thiện về máy tính"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>📥 Tải Video</span>
+                  <ChevronDown className="w-3 h-3 text-emerald-100" />
+                </a>
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-2xl border border-slate-200 p-2 hidden group-hover:block z-40 shadow-2xl animate-in fade-in">
+                  <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Lựa chọn file tải về
+                  </div>
+                  {project.burned_video_url && (
+                    <a
+                      href={project.burned_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                    >
+                      <span className="text-base">🔥</span>
+                      <div className="text-left">
+                        <div>Video Đã Burn Sub (.mp4)</div>
+                        <div className="text-[10px] text-slate-500 font-normal">Khuyên dùng · Đã xóa chữ Trung & lồng tiếng</div>
+                      </div>
+                    </a>
+                  )}
+                  {project.dubbed_video_url && (
+                    <a
+                      href={project.dubbed_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                    >
+                      <span className="text-base">🎙️</span>
+                      <div className="text-left">
+                        <div>Video Lồng Tiếng AI (.mp4)</div>
+                        <div className="text-[10px] text-slate-500 font-normal">Chỉ phối giọng đọc tiếng Việt</div>
+                      </div>
+                    </a>
+                  )}
+                  {project.dubbed_audio_url && (
+                    <a
+                      href={project.dubbed_audio_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm">🎵</span>
+                      <span>Audio Lồng Tiếng (.mp3)</span>
+                    </a>
+                  )}
+                  {project.original_video_url && (
+                    <a
+                      href={project.original_video_url}
+                      download
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm">📹</span>
+                      <span>Video Gốc (.mp4)</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button
+                disabled
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold border border-slate-200 cursor-not-allowed opacity-70"
+                title="Nút tải sẽ tự động bật khi bạn hoàn tất lồng tiếng hoặc burn video"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải Video (Chưa hoàn thiện)</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {/* Live Pipeline Stepper / Progress Tracker */}
+      <PipelineProgressTracker
+        project={project}
+        cuesCount={cues.length}
+        translatedCuesCount={cues.filter(c => !!c.translated_text).length}
+        onRetry={handleStartPipeline}
+        onRefresh={loadAllData}
+        liveLogs={liveLogs}
+      />
+
+      {/* Main Studio Grid: Video Player on Left (Sticky), Subtitle Grid on Right */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left: Video Player & Sticky Media Panel */}
+        <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-20">
+          {/* Video Track Selector Tabs */}
+          {(project.burned_video_url || project.dubbed_video_url || project.dubbed_audio_url) && (
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200 text-xs font-medium">
+              {(project.dubbed_video_url || project.dubbed_audio_url) && (
+                <button
+                  type="button"
+                  onClick={() => setActiveVideoSource('dubbed')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    (playback.kind === 'dubbed')
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>🎙️ Lồng Tiếng AI (Có Giọng Đọc)</span>
+                </button>
+              )}
+
+              {project.burned_video_url && (
+                <button
+                  type="button"
+                  onClick={() => setActiveVideoSource('burned')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    (playback.kind === 'burned')
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>🎬 Video Gắn Sub Cứng</span>
+                </button>
+              )}
+
+              {project.original_video_url && (
+                <button
+                  type="button"
+                  onClick={() => setActiveVideoSource('original')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                    activeVideoSource === 'original'
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>📹 Video Gốc</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <VideoPlayer
+            videoUrl={playback.videoUrl}
+            dubbedAudioUrl={playback.dubbedAudioUrl}
+            isBurnedVideo={playback.isBurnedVideo}
+            cues={cues}
+            currentTime={currentTime}
+            onTimeUpdate={setCurrentTime}
+            seekTime={seekTarget}
+            initialCleanMode={cleanChineseMode}
+            onCleanModeChange={setCleanChineseMode}
+            loadingPercentage={project.current_stage === 'DOWNLOADING_URL' ? project.progress_percentage : undefined}
+            loadingMessage={project.current_stage === 'DOWNLOADING_URL' ? 'Đang tải video gốc từ nguồn...' : undefined}
+          />
+
+          {/* Completed Media Download & Status Box */}
+          {(project.burned_video_url || project.dubbed_video_url || project.dubbed_audio_url) && (
+            <div className="bg-gradient-to-br from-emerald-50/90 via-teal-50/60 to-indigo-50/80 rounded-2xl p-4 border border-emerald-200/90 space-y-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">🎉</span>
+                  <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                    Sản Phẩm Đã Hoàn Thiện
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">
+                  ✅ Sẵn sàng tải
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Video và giọng lồng tiếng chất lượng cao đã sẵn sàng để tải về hoặc đăng tải lên mạng xã hội.
+              </p>
+
+              <div className="space-y-2 pt-0.5">
+                {/* Burned Video - Highest Quality Master */}
+                {project.burned_video_url && (
+                  <a
+                    href={project.burned_video_url}
+                    download
+                    className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold flex items-center justify-between shadow-xs transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Download className="w-4 h-4 text-emerald-100" />
+                      <span>🔥 Tải Video Đã Burn Sub (.mp4)</span>
+                    </div>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/20 text-emerald-50">
+                      Khuyên dùng
+                    </span>
+                  </a>
+                )}
+
+                {/* Secondary Downloads Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  {project.dubbed_video_url && (
+                    <a
+                      href={project.dubbed_video_url}
+                      download
+                      className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                      title="Video chỉ ghép audio lồng tiếng AI"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-200" />
+                      <span>🎙️ Video Dub (.mp4)</span>
+                    </a>
+                  )}
+                  {project.dubbed_audio_url && (
+                    <a
+                      href={project.dubbed_audio_url}
+                      download
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold text-center flex items-center justify-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
+                      title="File âm thanh giọng lồng tiếng"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                      <span>🎵 Audio (.mp3)</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {/* Real-time Project Pipeline Status */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-slate-500">Tiến Trình Xử Lý:</span>
+              <span className="text-indigo-600 font-extrabold">{getFriendlyStageName(project.current_stage)}</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-indigo-500 via-cyan-500 to-emerald-500 h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, project.progress_percentage))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
+              <span className="truncate max-w-[200px]">
+                {project.error_message && !project.error_message.includes('Traceback') && !project.error_message.includes('Error')
+                  ? project.error_message
+                  : getFriendlyStageName(project.current_stage)}
+              </span>
+              <span className="text-indigo-600 font-bold shrink-0">{project.progress_percentage}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Dual-view Subtitle Editor */}
+        <div className="lg:col-span-7 h-[calc(100vh-140px)] min-h-[620px]">
+          <SubtitleEditor
+            projectId={projectId}
+            cues={cues}
+            speakers={speakers}
+            currentTime={currentTime}
+            videoDuration={project.video_duration_seconds}
+            onSeek={handleSeek}
+            onCueUpdated={handleCueUpdated}
+            onRetranslateRequested={handleRetranslateRequested}
+          />
+        </div>
+      </div>
+
+      <DubbingQualitySummary projectId={projectId} audioUrl={project.dubbed_audio_url} />
+
+      {/* Modals */}
+      <DubbingModal
+        project={project}
+        isOpen={isDubModalOpen}
+        onClose={() => setIsDubModalOpen(false)}
+        onDubbingStarted={loadAllData}
+        cuesCount={cues.length}
+      />
+
+      <SpeakerMatrixModal
+        isOpen={isSpeakerModalOpen}
+        onClose={() => setIsSpeakerModalOpen(false)}
+        projectId={projectId}
+        speakers={speakers}
+        relationships={relationships}
+        onUpdated={loadAllData}
+      />
+
+      <GlossaryModal
+        isOpen={isGlossaryDrawerOpen}
+        onClose={() => setIsGlossaryDrawerOpen(false)}
+        projectId={projectId}
+        terms={glossaryTerms}
+        onUpdated={loadAllData}
+      />
+
+      <BurnProgressModal
+        isOpen={isBurnModalOpen}
+        onClose={() => setIsBurnModalOpen(false)}
+        project={project}
+        onBurnStarted={handleBurnStarted}
+        cuesCount={cues.length}
+      />
+    </div>
+  );
+}

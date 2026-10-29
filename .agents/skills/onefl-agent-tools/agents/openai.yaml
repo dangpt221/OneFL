@@ -1,0 +1,4 @@
+interface:
+  display_name: "OneFL Agent Tools"
+  short_description: "Maintain Agent contracts, jobs and artifact handoff"
+  default_prompt: "Use $onefl-agent-tools to implement and verify this OneFL Agent tool change."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "OneFL Media Verification"
+  short_description: "Verify isolated media jobs and UI/backend synchronization"
+  default_prompt: "Use $onefl-media-verification to verify this OneFL media or synchronization change."

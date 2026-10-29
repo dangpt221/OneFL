@@ -23,10 +23,7 @@ COPY pyproject.toml ./
 ENV VIRTUAL_ENV=/opt/venv
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ARG INSTALL_CLEANUP=false
-RUN if [ "$INSTALL_CLEANUP" = "true" ]; then \
-      uv pip install --no-cache -r pyproject.toml --extra cleanup; \
-    else uv pip install --no-cache -r pyproject.toml; fi
+RUN uv pip install --no-cache -r pyproject.toml
 
 # --- Stage 2: Minimal Runtime Image ---
 FROM python:3.11-slim AS runner

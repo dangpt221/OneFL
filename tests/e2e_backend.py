@@ -11,9 +11,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = Path(os.environ.get('ONEFL_E2E_WORK_DIR', ROOT / 'tmp' / 'feature-audit' / 'runtime')).resolve()
-if not WORK.is_relative_to((ROOT / 'tmp').resolve()):
-    raise RuntimeError('Fixture work directory must stay inside repository tmp')
+WORK = ROOT / 'tmp' / 'feature-audit' / 'runtime'
 WORK.mkdir(parents=True, exist_ok=True)
 os.environ.update({
     'DATABASE_URL': 'sqlite+aiosqlite:///' + (WORK / 'e2e.db').as_posix(),
@@ -37,7 +35,7 @@ from app.services.video_burner import video_burner
 from app.services.video_downloader import video_downloader
 from fastapi import HTTPException, Request
 
-control = {'fail_translation': False, 'fail_tts': False, 'delay': 1.0, 'speech_delay': 0., 'speech_calls': []}
+control = {'fail_translation': False, 'fail_tts': False, 'delay': 1.0, 'speech_calls': []}
 video_burner._cached_encoder = 'libx264'
 
 
@@ -58,7 +56,6 @@ async def fixture_completion(system_prompt, user_prompt, **kwargs):
 
 
 async def fixture_speech(text, voice='vi-VN-HoaiMyNeural', model='tts-1', speed=1., output_path=None):
-    await asyncio.sleep(control['speech_delay'])
     if control['fail_tts']:
         raise RuntimeError('Fixture speech provider unavailable')
     control['speech_calls'].append({'text': text, 'voice': voice, 'model': model, 'speed': speed})
@@ -112,7 +109,7 @@ async def configure(request: Request):
             project.content_revision += 1
             await db.commit()
         return {'seeded': count}
-    for key in ('fail_translation', 'fail_tts', 'delay', 'speech_delay'):
+    for key in ('fail_translation', 'fail_tts', 'delay'):
         if key in changes:
             control[key] = changes[key]
     return control
@@ -122,9 +119,7 @@ if __name__ == '__main__':
     (WORK / 'server.pid').write_text(str(os.getpid()))
     import uvicorn
     async def prepare():
-        sample = ('color=c=0x466482:size=320x240:rate=15,drawbox=x=40:y=40:w=60:h=24:color=white:t=fill'
-                  if os.environ.get('ONEFL_E2E_CLEANUP_SAMPLE') == '1' else 'testsrc=size=320x240:rate=15')
-        await run_media([settings.get_ffmpeg_bin(), '-y', '-f', 'lavfi', '-i', sample,
+        await run_media([settings.get_ffmpeg_bin(), '-y', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=15',
                          '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=24000', '-t', '3',
                          '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', str(WORK / 'source.mp4')])
     asyncio.run(prepare())

@@ -5,14 +5,6 @@ export function isProjectBusy(project: Pick<Project, 'status' | 'active_job_id'>
   return !!project.active_job_id || busyStatuses.has(project.status);
 }
 
-export function getDubbingRecovery(project: Project): 'active' | 'resumable' | 'configure' | 'unavailable' {
-  if (isProjectBusy(project)) return 'active';
-  if (!['FAILED', 'CANCELLED'].includes(project.status)) return 'unavailable';
-  const isDubbing = project.last_job_kind ? project.last_job_kind === 'DUBBING' : project.current_stage?.startsWith('DUBBING');
-  if (!isDubbing) return 'unavailable';
-  return project.last_dub_config && Object.keys(project.last_dub_config).length > 0 ? 'resumable' : 'configure';
-}
-
 export type VideoChoice = 'auto' | 'original' | 'dubbed' | 'burned';
 export function resolvePlayback(project: Project, choice: VideoChoice) {
   let kind: Exclude<VideoChoice, 'auto'>;

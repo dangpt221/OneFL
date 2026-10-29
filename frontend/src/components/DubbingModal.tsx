@@ -3,7 +3,6 @@
 import { isProjectBusy } from '@/lib/projectView';
 import { api } from '@/lib/api';
 import { Project, TTSVoice } from '@/lib/types';
-import { resolveDubbingVoice } from '@/lib/ttsPresentation';
 import { useEffect, useRef, useState } from 'react';
 
 interface DubbingModalProps {
@@ -16,7 +15,7 @@ interface DubbingModalProps {
 
 export default function DubbingModal({ project, isOpen, onClose, onDubbingStarted, cuesCount }: DubbingModalProps) {
   const [voices, setVoices] = useState<TTSVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>(() => resolveDubbingVoice(project));
+  const [selectedVoice, setSelectedVoice] = useState<string>(project.default_voice || 'vi-VN-HoaiMyNeural');
   const [useSpeakerMatrix, setUseSpeakerMatrix] = useState(false);
   const [model, setModel] = useState<string>('tts-1');
   const [speed, setSpeed] = useState<number>(1.0);
@@ -30,34 +29,35 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const previewRequest = useRef(0);
-  const voiceTouched = useRef(false);
-  const previewVoice = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    let active = true;
-    previewRequest.current++;
-    setPreviewLoading(false);
-    stopAudio();
-    setCurrentAudioUrl(null);
     if (isOpen) {
       const saved = project.last_dub_config || {};
-      voiceTouched.current = false;
-      setSelectedVoice(resolveDubbingVoice(project));
+      setSelectedVoice(saved.voice || project.default_voice || 'vi-VN-HoaiMyNeural');
       setModel(saved.model || 'tts-1'); setSpeed(saved.speed ?? 1);
       setMixOriginal(saved.mix_original ?? true); setDuckingVolume(saved.ducking_volume ?? .18);
       setUseSpeakerMatrix(saved.use_speaker_matrix ?? false);
       setErrorMsg(null);
-      api.getTTSVoices().then(data => {
-        if (!active) return;
-        setVoices(data);
-        if (!voiceTouched.current) setSelectedVoice(resolveDubbingVoice(project, data));
-      }).catch(error => {
-        if (active) setErrorMsg(error instanceof Error ? error.message : 'Không tải được danh sách giọng');
-      });
+      loadVoices();
+    } else {
+      previewRequest.current++;
+      setPreviewLoading(false);
+      stopAudio();
     }
-    return () => {active = false; previewRequest.current++; stopAudio();};
   }, [isOpen, project.id]);
+
+  const loadVoices = async () => {
+    try {
+      const data = await api.getTTSVoices();
+      setVoices(data);
+      if (!selectedVoice && data.length > 0) {
+        setSelectedVoice(data[0].id);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Không tải được danh sách giọng');
+    }
+  };
 
   const stopAudio = () => {
     if (audioRef.current) {
@@ -67,53 +67,39 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
     setIsPlayingPreview(false);
   };
 
-  const invalidatePreview = () => {
-    previewRequest.current++;
-    setPreviewLoading(false);
-    setCurrentAudioUrl(null);
-    stopAudio();
-  };
-  const selectVoice = (voice: string) => {
-    voiceTouched.current = true;
-    invalidatePreview();
-    setSelectedVoice(voice);
-    setErrorMsg(null);
-  };
-
   const handlePlayPreview = async (voiceId: string) => {
-    if (audioRef.current && !audioRef.current.paused && previewVoice.current === voiceId) {
-      invalidatePreview(); return;
-    }
-    const request = ++previewRequest.current;
-    stopAudio();
     try {
       setErrorMsg(null);
+      if (isPlayingPreview && selectedVoice === voiceId) {
+        stopAudio();
+        return;
+      }
+
       setPreviewLoading(true);
+      const request = ++previewRequest.current;
       const res = await api.previewTTSVoice(voiceId, speed, undefined, model);
       if (request !== previewRequest.current) return;
+      setPreviewLoading(false);
 
       if (res && res.preview_url) {
         setCurrentAudioUrl(res.preview_url);
         if (audioRef.current) {
-          previewVoice.current = voiceId;
           audioRef.current.src = res.preview_url;
           await audioRef.current.play();
-          // Selection/close already retired this request; a newer preview owns the element.
-          if (request !== previewRequest.current) return;
           setIsPlayingPreview(true);
         }
       }
-    } catch (error) {
-      if (request !== previewRequest.current) return;
-      setErrorMsg(error instanceof Error ? error.message : 'Không thể phát thử giọng nói. Vui lòng thử lại!');
-    } finally {if (request === previewRequest.current) setPreviewLoading(false);}
+    } catch (err: any) {
+      setPreviewLoading(false);
+      setErrorMsg('Không thể phát thử giọng nói. Vui lòng thử lại!');
+    }
   };
 
   const handleStartDubbing = async () => {
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
-      invalidatePreview();
+      stopAudio();
 
       await api.startProjectDubbing(project.id, {
         voice: selectedVoice,
@@ -170,7 +156,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800">
           {errorMsg && (
-            <div role="alert" className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center space-x-2">
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center space-x-2">
               <span>⚠️</span>
               <span>{errorMsg}</span>
             </div>
@@ -197,7 +183,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
               {currentVoiceObj && (
                 <button
                   type="button"
-                  onClick={() => handlePlayPreview(selectedVoice)}
+                  onClick={() => handlePlayPreview(currentVoiceObj.id)}
                   disabled={previewLoading}
                   className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer"
                 >
@@ -218,7 +204,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
                 return (
                   <div
                     key={v.id}
-                    onClick={() => selectVoice(v.id)}
+                    onClick={() => setSelectedVoice(v.id)}
                     className={`p-3.5 rounded-xl border transition-all cursor-pointer relative flex flex-col justify-between ${isSelected
                       ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70 bg-white'
@@ -231,12 +217,10 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
                             type="radio"
                             name="voice_radio"
                             checked={isSelected}
-                            onChange={() => selectVoice(v.id)}
-                            aria-label={v.name}
+                            onChange={() => setSelectedVoice(v.id)}
                             className="text-indigo-600 focus:ring-indigo-500"
                           />
                           <span className="text-sm font-bold text-slate-900">{v.name}</span>
-                          {v.is_default && <span className="text-[10px] font-semibold text-indigo-700">Mặc định</span>}
                         </div>
                         {v.badge && (
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${v.recommended
@@ -258,7 +242,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          selectVoice(v.id);
+                          setSelectedVoice(v.id);
                           handlePlayPreview(v.id);
                         }}
                         className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline flex items-center space-x-1"
@@ -359,8 +343,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
                 max="1.5"
                 step="0.1"
                 value={speed}
-                onChange={(e) => {invalidatePreview(); setSpeed(parseFloat(e.target.value));}}
-                aria-label="Tốc độ đọc giọng AI"
+                onChange={(e) => setSpeed(parseFloat(e.target.value))}
                 className="w-full accent-indigo-600"
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium">
@@ -374,7 +357,7 @@ export default function DubbingModal({ project, isOpen, onClose, onDubbingStarte
               <label className="text-xs font-bold text-slate-700 block mb-1.5">Mô hình chất lượng:</label>
               <select
                 value={model}
-                onChange={(e) => {invalidatePreview(); setModel(e.target.value);}}
+                onChange={(e) => setModel(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="tts-1">OpenAI TTS-1 (Tốc độ cao - Tiêu chuẩn)</option>

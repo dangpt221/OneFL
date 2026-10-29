@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { X, UploadCloud, Video, Sparkles, Loader2, FileCheck, Link as LinkIcon, Globe, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -33,10 +33,6 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   const [uploadProgress, setUploadProgress] = useState(0);
   const uploadProjectRef = useRef<{ fingerprint: string; id: string } | null>(null);
   const inspectRequestRef = useRef(0);
-  useEffect(() => {
-    setIsInspectingUrl(false);
-    return () => { ++inspectRequestRef.current; };
-  }, [isOpen]);
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,10 +46,8 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   };
 
   const handleUrlBlurOrPaste = async (urlToInspect: string) => {
-    const requestId = ++inspectRequestRef.current;
     const trimmed = urlToInspect.trim();
     if (!trimmed || (!trimmed.startsWith('http://') && !trimmed.startsWith('https://'))) {
-      setIsInspectingUrl(false);
       return;
     }
 
@@ -61,6 +55,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     setErrorMessage(null);
 
     try {
+      const requestId = ++inspectRequestRef.current;
       const info = await api.inspectUrlInfo(trimmed);
       if (requestId !== inspectRequestRef.current) return;
       if (info && info.success) {
@@ -71,17 +66,11 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         if (info.suggested_source_language) {
           setSourceLanguage(info.suggested_source_language);
         }
-      } else {
-        setUrlInfo(null);
-        setErrorMessage(info?.error || 'Không đọc được dữ liệu video. Kiểm tra link hoặc tải file từ máy tính.');
       }
     } catch (err: any) {
-      if (requestId !== inspectRequestRef.current) return;
       console.warn('Could not inspect url:', err);
-      setUrlInfo(null);
-      setErrorMessage(err instanceof Error ? err.message : 'Không kiểm tra được link video.');
     } finally {
-      if (requestId === inspectRequestRef.current) setIsInspectingUrl(false);
+      setIsInspectingUrl(false);
     }
   };
 
@@ -194,12 +183,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
 
           <button
             type="button"
-            onClick={() => {
-              ++inspectRequestRef.current;
-              setIsInspectingUrl(false);
-              setErrorMessage(null);
-              setSourceType('upload');
-            }}
+            onClick={() => setSourceType('upload')}
             className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
               sourceType === 'upload'
                 ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-slate-200'
@@ -211,7 +195,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         </div>
 
         {errorMessage && (
-          <div role="alert" className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700 flex items-center space-x-2">
+          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700 flex items-center space-x-2">
             <span>⚠️</span>
             <span>{errorMessage}</span>
           </div>
@@ -230,12 +214,8 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
                     type="url"
                     value={videoUrl}
                     onChange={(e) => {
-                      ++inspectRequestRef.current;
-                      setIsInspectingUrl(false);
-                      setErrorMessage(null);
-                      if (title === urlInfo?.title) setTitle('');
-                      setUrlInfo(null);
                       setVideoUrl(e.target.value);
+
                     }}
                     onBlur={(e) => handleUrlBlurOrPaste(e.target.value)}
                     placeholder="https://www.bilibili.com/video/BV1... hoặc b23.tv/..."

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "test": "node tests/regressions.cjs && node tests/refresh-regressions.cjs && node tests/timing-regressions.cjs && node tests/websocket-regressions.cjs && node tests/url-inspection-regressions.cjs && node tests/cleanup-regressions.cjs && node tests/presentation-regressions.cjs && node tests/tts-default-regressions.cjs"
+    "test": "node tests/regressions.cjs && node tests/refresh-regressions.cjs && node tests/timing-regressions.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

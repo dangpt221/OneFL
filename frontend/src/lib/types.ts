@@ -1,35 +1,3 @@
-export interface CleanupRegion {
-  x: number; y: number; width: number; height: number;
-  track: boolean; reference_time: number;
-}
-
-export interface VideoCleanupOptions {
-  auto_detect_chinese: boolean;
-  scan_interval_seconds: number;
-  confidence: number;
-  padding: number;
-  regions: CleanupRegion[];
-}
-
-export type SubtitlePreset = 'comic' | 'cinema' | 'box_banner' | 'yellow_highlight';
-export type CleanChineseMode = 'white_bars' | 'cinema_bars' | 'bottom_bar' | 'smart_blur' | 'cinema_zoom' | 'inpaint' | 'none';
-
-export interface BurnOptions {
-  subtitle_preset?: SubtitlePreset;
-  bilingual?: boolean;
-  mask_original_sub?: boolean;
-  clean_chinese_mode?: CleanChineseMode;
-  top_mask_pct?: number;
-  bottom_mask_pct?: number;
-  cleanup_options?: VideoCleanupOptions;
-}
-
-export interface CleanupReport {
-  processed_frames: number; masked_frames: number; ocr_scans: number;
-  chinese_detections: number; tracking_misses: number; requires_review: boolean;
-  max_mask_ratio: number; processing_seconds: number; chunks: number;
-}
-
 export type ProjectStatus = 
   | 'CREATED'
   | 'PROCESSING'
@@ -52,7 +20,7 @@ export interface Project {
   burned_video_url?: string;
   dubbed_video_url?: string;
   dubbed_audio_url?: string;
-  default_voice?: string | null;
+  default_voice?: string;
   subtitles_ass_path?: string;
   subtitles_srt_path?: string;
   video_duration_seconds: number;
@@ -66,7 +34,7 @@ export interface Project {
   current_stage: string;
   progress_percentage: number;
   error_message?: string;
-  settings_override?: Record<string, any> | null;
+  settings_override?: Record<string, any>;
   cue_count?: number;
   speaker_count?: number;
   glossary_count?: number;

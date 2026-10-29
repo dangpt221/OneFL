@@ -140,7 +140,7 @@ class Settings(BaseSettings):
     BURN_OUTPUT_AUDIO_BITRATE: str = "192k"
 
     # 8. TTS Dubbing Engine
-    DEFAULT_TTS_VOICE: str = "vieneu-ngoc-huyen"  # Ngọc Huyền profile backed by Edge Hoài My
+    DEFAULT_TTS_VOICE: str = "vi-VN-HoaiMyNeural"  # 🌸 Microsoft Hoài My Neural (Chuẩn tiếng Việt tự nhiên)
     DEFAULT_TTS_MODEL: str = "tts-1" # tts-1 | tts-1-hd
     DEFAULT_TTS_SPEED: float = 1.0
     DEFAULT_DUCKING_VOLUME: float = 0.18  # 18% background music volume

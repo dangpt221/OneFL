@@ -3,10 +3,9 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Shield, Film, EyeOff, Sparkles, ChevronDown, Loader2 } from 'lucide-react';
 import { indexAllSubtitleTimeline } from '@/lib/subtitleTimeline';
-import { SubtitleCue, CleanChineseMode, SubtitlePreset } from '@/lib/types';
-import { comicText, subtitlePreviewStyle } from '@/lib/burnPresentation';
+import { SubtitleCue } from '@/lib/types';
 
-export type { CleanChineseMode } from '@/lib/types';
+export type CleanChineseMode = 'cinema_bars' | 'bottom_bar' | 'smart_blur' | 'none';
 
 interface VideoPlayerProps {
   videoUrl?: string;
@@ -20,9 +19,6 @@ interface VideoPlayerProps {
   onCleanModeChange?: (mode: CleanChineseMode) => void;
   loadingPercentage?: number;
   loadingMessage?: string;
-  subtitlePreset?: SubtitlePreset;
-  topMaskPct?: number;
-  bottomMaskPct?: number;
 }
 
 export default function VideoPlayer({
@@ -33,19 +29,13 @@ export default function VideoPlayer({
   onTimeUpdate,
   seekTime,
   isBurnedVideo = false,
-  initialCleanMode = 'white_bars',
+  initialCleanMode = 'cinema_bars',
   onCleanModeChange,
   loadingPercentage,
   loadingMessage,
-  subtitlePreset = 'cinema',
-  topMaskPct = 11,
-  bottomMaskPct = 15,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [viewportSize, setViewportSize] = useState({width: 640, height: 360});
-  const [videoAspect, setVideoAspect] = useState(16 / 9);
   const [playbackError, setPlaybackError] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -56,6 +46,8 @@ export default function VideoPlayer({
 
   const [cleanMode, setCleanMode] = useState<CleanChineseMode>(initialCleanMode);
   const [isCleanMenuOpen, setIsCleanMenuOpen] = useState(false);
+  const [topMaskPct, setTopMaskPct] = useState(11);
+  const [bottomMaskPct, setBottomMaskPct] = useState(16);
   const [subtitleColor, setSubtitleColor] = useState<'white' | 'yellow' | 'cyan'>('white');
 
   const getSubtitleColorClass = () => {
@@ -73,13 +65,6 @@ export default function VideoPlayer({
       setCleanMode(initialCleanMode);
     }
   }, [initialCleanMode]);
-
-  useEffect(() => {
-    if (!viewportRef.current) return;
-    const observer = new ResizeObserver(([entry]) => setViewportSize({width: entry.contentRect.width, height: entry.contentRect.height}));
-    observer.observe(viewportRef.current); return () => observer.disconnect();
-  }, []);
-  useEffect(() => {setVideoAspect(16 / 9);}, [videoUrl]);
 
   // Automatically disable subtitle overlay when playing a video with hardcoded/burned subtitles
   useEffect(() => {
@@ -147,9 +132,6 @@ export default function VideoPlayer({
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
-      if (videoRef.current.videoWidth && videoRef.current.videoHeight) {
-        setVideoAspect(videoRef.current.videoWidth / videoRef.current.videoHeight);
-      }
     }
   };
 
@@ -195,7 +177,7 @@ export default function VideoPlayer({
     <div className="bg-white rounded-3xl p-4 flex flex-col justify-between border border-slate-200 shadow-sm relative overflow-hidden group">
       {playbackError && <p role="alert" className="mb-2 text-sm text-red-700">{playbackError}</p>}
       {/* Video Viewport */}
-      <div ref={viewportRef} style={{aspectRatio: videoAspect}} className="relative w-full rounded-2xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-inner select-none">
+      <div className="relative aspect-video w-full rounded-2xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-inner select-none">
         {videoUrl ? (
           <>
             <video
@@ -248,10 +230,10 @@ export default function VideoPlayer({
         )}
 
         {/* Clean Chinese Mask: Top Bar (Covers Bilibili Logo & Top Text/Watermarks) */}
-        {!isBurnedVideo && topMaskPct > 0 && ['white_bars', 'cinema_bars', 'smart_blur'].includes(cleanMode) && (
+        {!isBurnedVideo && (cleanMode === 'cinema_bars' || cleanMode === 'smart_blur') && (
           <div
             className={`absolute top-0 left-0 right-0 z-10 pointer-events-none transition-all duration-200 flex items-center justify-between px-3 text-[10px] text-slate-500 font-mono ${
-              cleanMode === 'white_bars' ? 'bg-white' : cleanMode === 'cinema_bars' ? 'bg-black' : 'backdrop-blur-md bg-black/40'
+              cleanMode === 'cinema_bars' ? 'bg-black' : 'backdrop-blur-md bg-black/40'
             }`}
             style={{ height: `${topMaskPct}%` }}
           >
@@ -260,14 +242,14 @@ export default function VideoPlayer({
         )}
 
         {/* Clean Chinese Mask: Bottom Bar (Covers Chinese Hardsubs completely) + Centered Subtitle */}
-        {!isBurnedVideo && bottomMaskPct > 0 && ['white_bars', 'cinema_bars', 'bottom_bar', 'smart_blur'].includes(cleanMode) && (
+        {!isBurnedVideo && (cleanMode === 'cinema_bars' || cleanMode === 'bottom_bar' || cleanMode === 'smart_blur') && (
           <div
             className={`absolute bottom-0 left-0 right-0 z-10 pointer-events-none flex items-center justify-center px-4 transition-all duration-200 ${
-              cleanMode === 'white_bars' ? 'bg-white' : cleanMode === 'smart_blur' ? 'backdrop-blur-md bg-black/60' : 'bg-black'
+              cleanMode === 'smart_blur' ? 'backdrop-blur-md bg-black/60' : 'bg-black'
             }`}
             style={{ height: `${bottomMaskPct}%` }}
           >
-            {subtitlePreset !== 'comic' && cleanMode !== 'white_bars' && showOverlay && activeSubtitle && (
+            {showOverlay && activeSubtitle && (
               <div className="text-center font-medium text-xs sm:text-sm md:text-base leading-tight max-w-[92%] animate-fade-in">
                 {activeSubtitle.split('\n').map((line, idx) => (
                   <div
@@ -283,7 +265,7 @@ export default function VideoPlayer({
         )}
 
         {/* Fallback floating subtitle preview when cleanMode is 'none' */}
-        {!isBurnedVideo && subtitlePreset !== 'comic' && cleanMode === 'none' && showOverlay && activeSubtitle && (
+        {!isBurnedVideo && cleanMode === 'none' && showOverlay && activeSubtitle && (
           <div className="absolute bottom-6 left-0 right-0 px-6 text-center pointer-events-none transition-all animate-fade-in z-10">
             <div className="inline-block bg-black/80 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 text-white font-medium text-sm sm:text-base leading-snug max-w-[90%] shadow-2xl">
               {activeSubtitle.split('\n').map((line, idx) => (
@@ -292,14 +274,6 @@ export default function VideoPlayer({
                 </div>
               ))}
             </div>
-          </div>
-        )}
-        {!isBurnedVideo && showOverlay && activeSubtitle && (subtitlePreset === 'comic' || cleanMode === 'white_bars' || cleanMode === 'inpaint' || cleanMode === 'cinema_zoom' || (bottomMaskPct === 0 && cleanMode !== 'none')) && (
-          <div className="absolute inset-x-0 z-10 flex justify-center text-center pointer-events-none"
-            style={{bottom: (subtitlePreset === 'box_banner' ? 36 : 30) * viewportSize.height / 720}}>
-            <p data-testid="studio-styled-subtitle" style={subtitlePreviewStyle(subtitlePreset, viewportSize.width, viewportSize.height)}>
-              {subtitlePreset === 'comic' ? comicText(activeSubtitle) : activeSubtitle}
-            </p>
           </div>
         )}
       </div>
@@ -352,7 +326,7 @@ export default function VideoPlayer({
 
           <div className="flex items-center gap-2">
             {/* Subtitle Color Toggle Button */}
-            {!isBurnedVideo && showOverlay && subtitlePreset !== 'comic' && !['white_bars', 'inpaint', 'cinema_zoom'].includes(cleanMode) && bottomMaskPct > 0 && (
+            {!isBurnedVideo && showOverlay && (
               <button
                 type="button"
                 onClick={() => {
@@ -394,17 +368,15 @@ export default function VideoPlayer({
                 >
                   <Shield className="w-3.5 h-3.5 text-amber-600" />
                   <span className="hidden sm:inline">
-                    {cleanMode === 'white_bars' ? 'Xem trước: dải trắng' : cleanMode === 'cinema_bars' ? '🎬 Xem trước: thanh đen' :
+                    {cleanMode === 'cinema_bars' ? '🎬 Xem trước: thanh đen' :
                      cleanMode === 'bottom_bar' ? '🛡️ Xem trước: che sub dưới' :
-                     cleanMode === 'smart_blur' ? '🌫️ Làm Mờ' : cleanMode === 'inpaint' ? 'Phục hồi nền khi render' : cleanMode === 'cinema_zoom' ? 'Cắt viền khi render' : '❌ Không Che'}
+                     cleanMode === 'smart_blur' ? '🌫️ Làm Mờ' : '❌ Không Che'}
                   </span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
                 {isCleanMenuOpen && (
                   <div className="absolute right-0 bottom-full mb-2 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl p-2 z-40 space-y-1 animate-in fade-in">
-                    <button type="button" onClick={() => changeCleanMode('white_bars')}
-                      className={`w-full text-left px-3 py-2 text-xs rounded-lg ${cleanMode === 'white_bars' ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}>Dải trắng trên và dưới {cleanMode === 'white_bars' ? '✓' : ''}</button>
                     <div className="px-2 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                       🛡️ Chế Độ Xóa Chữ Tiếng Trung:
                     </div>

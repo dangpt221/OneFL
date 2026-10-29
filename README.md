@@ -46,8 +46,6 @@ Timed audio mixing uses fixed PCM blocks on disk. Reserve disk space for the inp
 - `ENABLE_SPEAKER_PROFILER` controls text-based profile inference. `ENABLE_VISUAL_CONTEXT=true` adds bounded real frame samples through a vision-capable configured OpenAI model; this incurs provider requests. Missing configuration fails explicitly.
 - Translation providers are Gemini and OpenAI. An explicit model override is honored without changing providers/models. Otherwise an enabled provider fallback uses the configured alternate provider. Guardrail repair has a finite retry budget; unresolved QC fails. Preserved manual edits retain QC warnings.
 - Voice catalog entries with legacy `vieneu-*` IDs are Edge voice profiles with rate/pitch/EQ, not a separate VieNeu synthesis server. Preview uses the selected provider/profile and text.
-- The default narrator is **Ngọc Huyền** (`DEFAULT_TTS_VOICE=vieneu-ngoc-huyen`). New project/speaker defaults, HTTP/Agent requests and the dubbing dialog use the configured default; an explicitly saved project/dubbing/speaker voice remains selected. Edge TTS requires **7.3.1 or newer** for the current Microsoft handshake. Provider failures keep the chosen voice and show an actionable preview error rather than silently changing providers. Restart the backend after changing its configuration or dependencies, once its active jobs have finished. [Default voice and preview verification](docs/reviews/2026-10-22-ngoc-huyen-default-preview.md).
-- The default narrator is **Ngọc Huyền** (`DEFAULT_TTS_VOICE=vieneu-ngoc-huyen`). New project/speaker defaults, HTTP/Agent requests and the dubbing dialog use the configured default; an explicitly saved project/dubbing/speaker voice remains selected. Edge TTS requires **7.3.1 or newer** for the current Microsoft handshake. Provider failures keep the chosen voice and show an actionable preview error rather than silently changing providers. Restart the backend after changing its configuration or dependencies, once its active jobs have finished. [Default voice and preview verification](docs/reviews/2026-10-22-ngoc-huyen-default-preview.md).
 - Player color/mask controls preview presentation; the Burn Video dialog defines exported render settings. The player shows all active cues when they overlap, using the same half-open cue intervals as export. Studio marks overlapping cues for review.
 - Studio's **Sửa thời gian** action edits start/end seconds with the translated text in one save. Invalid or out-of-video intervals are rejected; failed saves and remote changes retain the draft. Saving invalidates previous dubbing/render references across tabs. Regenerate those outputs after changing timing.
 - Newly generated dubbing fits decoded PCM inside each subtitle cue, including the last cue, without borrowing the following gap or cutting the final word. Tempo fitting is bounded to 2.5x; impossible fits fail with the cue index and guidance to shorten text/edit timing. This is a technical limit, not a guarantee of natural speech at high speed.
@@ -55,45 +53,6 @@ Timed audio mixing uses fixed PCM blocks on disk. Reserve disk space for the inp
 - S3/R2/MinIO storage, Temporal orchestration, Redis event transport and a distributed GPU fleet remain architecture targets. Startup currently requires `STORAGE_DRIVER=local`; optional Compose infrastructure profiles do not implement those integrations.
 
 For containers, set a random `API_ACCESS_TOKEN` of at least 24 characters, configure PostgreSQL credentials and run `docker compose up --build`. The frontend is built with the backend's internal DNS address. Published ports bind to loopback; use a trusted HTTPS reverse proxy and set `CORS_ORIGINS` to its browser origin for remote deployment. Production sessions use Secure cookies. URL ingestion is limited to configured video hosts and rejects private/loopback initial destinations; deploy with restricted network egress as well. Docker image execution is not covered by the local Windows test evidence.
-
-## Bilibili URL recovery
-
-The downloader uses yt-dlp 2026.10.21 or newer. When a public Bilibili video page omits embedded `INITIAL_STATE`, a scoped extractor adapter reads its signed WBI View metadata and reuses upstream player/format/multipart logic. It requires successful API metadata for the requested video and preserves explicit access/rate-limit failures. No browser credentials are read. Updating yt-dlp alone does not replace this compatibility fix.
-
-If downloading fails before a local source exists, Studio's pipeline retry queues a DOWNLOAD job before ASR; it does not start ASR against a missing file. URL inspection failures are shown in the creation dialog. If the site denies access, check the same URL in a browser or upload the local video. [Verified Bilibili repair](docs/reviews/2026-10-22-bilibili-ingestion.md) records the exact source, stream checks and limitations.
-
-## White cover bands and reference subtitle style
-
-In **Burn Video**, choose **Áp dụng kiểu mẫu** to use opaque white top/bottom bands and white uppercase bold italic subtitles with a black outline. The `comic` ASS preset uses Arial with horizontal scaling to approximate the supplied reference. Unconfigured projects default to this style; explicit saved settings remain until changed. The preview uses the source video's aspect ratio and the active cue, with a sample sentence between cues. Browser font metrics/line wrapping are approximate; review the rendered MP4 before posting.
-
-The starting bands cover 11% at the top and 15% at the bottom. Adjust **Chiều cao dải trên (%)** (0–28) and **Chiều cao dải dưới (%)** (0–35) to fit the source; zero disables that band. Covers are rendered before ASS and keep the source dimensions/audio. Chinese text or logos outside those bands remain visible. Choose the separate region/OCR cleanup mode below for those areas.
-
-Translated text becomes uppercase only in the `comic` ASS/video presentation; edited text and SRT/VTT retain their saved casing. Completed-render and Studio ASS downloads use the saved preset. The player menu changes preview only; the Burn dialog saves the output configuration. [Style verification and short 1080p sample](docs/reviews/2026-10-22-whitebars-comic-style.md).
-
-## White cover bands and reference subtitle style
-
-In **Burn Video**, choose **Áp dụng kiểu mẫu** to use opaque white top/bottom bands and white uppercase bold italic subtitles with a black outline. The `comic` ASS preset uses Arial with horizontal scaling to approximate the supplied reference. Unconfigured projects default to this style; explicit saved settings remain until changed. The preview uses the source video's aspect ratio and the active cue, with a sample sentence between cues. Browser font metrics/line wrapping are approximate; review the rendered MP4 before posting.
-
-The starting bands cover 11% at the top and 15% at the bottom. Adjust **Chiều cao dải trên (%)** (0–28) and **Chiều cao dải dưới (%)** (0–35) to fit the source; zero disables that band. Covers are rendered before ASS and keep the source dimensions/audio. Chinese text or logos outside those bands remain visible. Choose the separate region/OCR cleanup mode below for those areas.
-
-Translated text becomes uppercase only in the `comic` ASS/video presentation; edited text and SRT/VTT retain their saved casing. Completed-render and Studio ASS downloads use the saved preset. The player menu changes preview only; the Burn dialog saves the output configuration. [Style verification and short 1080p sample](docs/reviews/2026-10-22-whitebars-comic-style.md).
-
-## Remove source Chinese text and logos
-
-Install the optional local cleanup engine and explicitly prepare its bundled OCR models from the repository root:
-
-```powershell
-backend/.venv/Scripts/python.exe -m pip install -e './backend[cleanup]'
-backend/.venv/Scripts/python.exe scripts/prepare_video_cleanup.py
-```
-
-Restart the backend after installation. In **Burn Video**, choose **Xóa chữ/logo — phục hồi nền**. Automatic OCR targets Chinese text. Select additional image logos on the source video, or enter normalized coordinates as percentages; enable **Bám theo logo di chuyển** and select a clear reference time for moving logos. Saved regions/OCR settings belong to the project and are reused when reopening render settings. Removal runs before translated ASS, preserving the new Vietnamese subtitles. Completed renders expose processing counts and tracking misses through **Kết quả xóa chữ/logo** and `GET /api/v1/projects/{id}/pipeline/cleanup-report`.
-
-This is CPU OCR plus OpenCV Telea inpainting, which reconstructs pixels from surrounding image areas. It is not a generative video restoration model: detailed backgrounds can smear/flicker, stylized Chinese or text appearing between scans may be missed, and non-text logos need manual selection. Shorter OCR intervals cost more CPU. A tracking miss leaves uncertain pixels for review; zero misses does not certify complete removal. Supported inputs are SDR 8-bit up to 4K/120fps; HDR/10-bit fails explicitly rather than being silently flattened. Source resolution is retained, without automatic 1080p upscaling. Frames stream through bounded pipes with one cleanup worker; full 10-hour resource usage/drift is not yet benchmarked.
-
-Models stay under `data/models/video_cleanup` with a SHA-256 manifest. Missing dependencies/models fail before a BURN job is queued; no models are silently downloaded during rendering. Existing cover/blur/crop modes remain available. Container builds may enable dependencies with `--build-arg INSTALL_CLEANUP=true` (backend build context), then explicitly run `python -m app.services.cleanup_ocr` with persistent `/app/data` mounted before rendering. Container execution is not certified by Windows tests.
-
-[Cleanup verification and usage](docs/reviews/2026-10-22-video-text-logo-cleanup.md) records actual short media, OCR and browser evidence.
 
 ## Verification
 

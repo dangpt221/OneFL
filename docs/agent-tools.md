@@ -71,8 +71,6 @@ Giới hạn: tối đa 10 vòng, ngân sách Runner 120 giây, mỗi LLM call t
 
 - ASR/burn trước đây trả kết quả trực tiếp; nay trả job ID. Client cần theo dõi job thay vì đọc ngay cues/output. `Job.result` được lưu vào database và có trong API đọc job. Worker khôi phục owner context từ project khi dispatch.
 - Không truyền `preset` cho burn file ASS: field này bị từ chối thay vì báo đã áp dụng. Chọn preset ở export, hoặc dùng cấu hình burn của HTTP/Studio.
-- Kiểu theo ảnh: export ASS với `preset="comic"`, sau đó burn với `clean_chinese_mode="white_bars"`. Chữ render trắng đậm nghiêng, in hoa và viền đen; hai dải che nền trắng được vẽ trước ASS. Default của Agent hiện có giữ nguyên. Muốn chỉnh riêng phần trăm chiều cao dải, dùng cấu hình Burn của Studio/HTTP.
-- Kiểu theo ảnh: export ASS với `preset="comic"`, sau đó burn với `clean_chinese_mode="white_bars"`. Chữ render trắng đậm nghiêng, in hoa và viền đen; hai dải che nền trắng được vẽ trước ASS. Default của Agent hiện có giữ nguyên. Muốn chỉnh riêng phần trăm chiều cao dải, dùng cấu hình Burn của Studio/HTTP.
 - ASR có cue cũ yêu cầu force_reprocess=true; transcript/profiles/relationships cũ chỉ được thay sau khi ASR có kết quả hợp lệ. Các artifact phụ thuộc bị invalidate, revision/status/URLs được snapshot WebSocket đồng bộ.
 - Export ASS/SRT của project cập nhật đường dẫn subtitle. File output có phiên bản; `artifact_current=false` cho biết result cũ không còn khớp revision hiện tại. SUCCEEDED là lịch sử thực thi; không bảo đảm output cũ vẫn là phiên bản hiện hành.
 - Startup migration version 3 bổ sung JSON `jobs.result` vào DSN đang cấu hình. Sao lưu database/media trước khi khởi động bản nâng cấp; không đổi DSN để né lỗi migration.

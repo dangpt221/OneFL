@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { SpeakerProfile, RelationshipMatrix, TTSVoice } from '@/lib/types';
 import { api } from '@/lib/api';
-import { DEFAULT_TTS_VOICE } from '@/lib/ttsPresentation';
 
 interface SpeakerMatrixModalProps {
   isOpen: boolean;
@@ -148,7 +147,7 @@ export default function SpeakerMatrixModal({
         original_name: newOriginalName.trim(),
         gender: newGender,
         role: newRole.trim(),
-        tts_voice: newGender === 'female' ? DEFAULT_TTS_VOICE : 'vi-VN-NamMinhNeural',
+        tts_voice: newGender === 'female' ? 'vi-VN-HoaiMyNeural' : 'vi-VN-NamMinhNeural',
       });
       setEditingSpeakers((prev) => [...prev, created]);
       setNewTag('');
@@ -683,7 +682,7 @@ export default function SpeakerMatrixModal({
                     </label>
                     <div className="flex items-center gap-1.5">
                       <select
-                        value={spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : DEFAULT_TTS_VOICE)}
+                        value={spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')}
                         onChange={(e) => handleSpeakerChange(spk.speaker_tag, 'tts_voice', e.target.value)}
                         className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl bg-indigo-50/50 border border-indigo-200 text-xs font-semibold text-slate-900 focus:outline-none shadow-xs truncate"
                       >
@@ -753,14 +752,14 @@ export default function SpeakerMatrixModal({
                       {/* Nút Nghe Thử Giọng Ngay Lập Tức */}
                       <button
                         type="button"
-                        onClick={() => handlePlayVoicePreview(spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : DEFAULT_TTS_VOICE))}
+                        onClick={() => handlePlayVoicePreview(spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural'))}
                         disabled={previewLoadingVoice !== null}
                         title="Nghe thử giọng này"
                         className="px-2.5 py-1.5 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1 shrink-0 shadow-2xs"
                       >
-                        {previewLoadingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : DEFAULT_TTS_VOICE)) ? (
+                        {previewLoadingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')) ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : previewingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : DEFAULT_TTS_VOICE)) ? (
+                        ) : previewingVoice === (spk.tts_voice || (spk.gender === 'male' ? 'vi-VN-NamMinhNeural' : 'vi-VN-HoaiMyNeural')) ? (
                           <span className="text-red-600 font-extrabold text-[11px]">⏹️ Dừng</span>
                         ) : (
                           <>
