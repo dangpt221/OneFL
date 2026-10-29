@@ -1,0 +1,119 @@
+services:
+  # ── 1. PostgreSQL 16 Enterprise Database ────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: onefl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-onefl_videotrans}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-onefl_videotrans}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── 2. Redis 7 High-Throughput Broker & Cache ──────────────────────────────
+  redis:
+    profiles: ["infrastructure"]
+    image: redis:7-alpine
+    container_name: onefl-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── 3. OneFL Backend (FastAPI + uv + FFmpeg) ────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: onefl-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - ENV=production
+      - DEBUG=false
+      - ONEFL_ROOT_DIR=/app
+      - API_ACCESS_TOKEN=${API_ACCESS_TOKEN:?Set a random API_ACCESS_TOKEN of at least 24 characters}
+      - UPLOAD_DIR=/app/data/uploads
+      - OUTPUT_DIR=/app/data/outputs
+      - TEMP_SCRATCH_DIR=/app/tmp/scratch
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-onefl_videotrans}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-onefl_videotrans}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_DRIVER=${STORAGE_DRIVER:-local}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── 4. OneFL Frontend (Next.js 14 Standalone) ───────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_INTERNAL_URL: http://backend:8000
+    container_name: onefl-frontend
+    restart: unless-stopped
+    environment:
+      - BACKEND_INTERNAL_URL=http://backend:8000
+      - PORT=3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+
+  # ── 5. MinIO S3-Compatible Storage (Optional Local Cloud Object Store) ─────
+  minio:
+    profiles: ["infrastructure"]
+    image: minio/minio:latest
+    container_name: onefl-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local

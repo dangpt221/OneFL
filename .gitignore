@@ -1,0 +1,91 @@
+# Environment & Secrets (BẮT BUỘC KHÔNG PUSH LÊN GITHUB)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/backend/lib/
+/backend/lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database (Không push DB chứa dữ liệu nặng lên repo)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+.turbo/
+
+# Media & Storage (Dung lượng lớn - Bắt buộc bỏ qua)
+/data/
+/uploads/
+/outputs/
+tmp/
+scratch/
+*.mp4
+*.mp3
+*.wav
+*.aac
+*.pcm
+*.m3u8
+/data/**/*.ts
+*.m4a
+*.flac
+*.ass
+*.srt
+*.log
+
+# Third-party / Submodules
+VieNeu-TTS/
+pyvideotrans/
+
+# Documentation Exceptions
+!Architecture.md
+!Translation_Engine_Specification.md
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Version application source and small evaluation fixtures.
+!frontend/src/lib/
+!frontend/src/lib/**
+!frontend/src/data/
+!frontend/src/data/*.json
+!tests/fixtures/
+!tests/fixtures/**
